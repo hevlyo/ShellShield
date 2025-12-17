@@ -15,9 +15,13 @@ A Claude Code hook that blocks destructive file deletion commands (`rm`, `shred`
 
 ## Installation
 
-### Prerequisites
+### 1. Install Bun
 
-Install the `trash` CLI for recoverable file deletion:
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+### 2. Install the trash CLI
 
 ```bash
 # macOS
@@ -27,19 +31,13 @@ brew install trash
 npm install -g trash-cli
 ```
 
-### Build the Hook
+### 3. Install dependencies
 
 ```bash
-# Install dependencies
 bun install
-
-# Build standalone executable (no Bun required to run)
-bun run build
 ```
 
-The compiled binary will be at `dist/block-destructive-commands`.
-
-### Configure Claude Code
+### 4. Configure Claude Code
 
 Add to your `.claude/settings.json` or `.claude/settings.local.json`:
 
@@ -52,7 +50,7 @@ Add to your `.claude/settings.json` or `.claude/settings.local.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/dist/block-destructive-commands"
+            "command": "bun run $CLAUDE_PROJECT_DIR/src/index.ts"
           }
         ]
       }
@@ -67,19 +65,8 @@ Add to your `.claude/settings.json` or `.claude/settings.local.json`:
 # Run tests
 bun test
 
-# Build for current platform
+# Build standalone executable (optional, ~60MB)
 bun run build
-
-# Build for all platforms
-bun run build:all
-```
-
-### Cross-Platform Builds
-
-```bash
-bun run build:linux   # Linux x64
-bun run build:macos   # macOS ARM64
-bun run build:windows # Windows x64
 ```
 
 ## How It Works
