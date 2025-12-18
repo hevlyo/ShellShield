@@ -1,16 +1,30 @@
 # Block Destructive Commands
 
-A Claude Code hook that blocks destructive file deletion commands (`rm`, `shred`, `unlink`) and directs users to use `trash` instead. This ensures deleted files can be recovered from the system trash.
+A Claude Code hook that blocks destructive file deletion commands and directs users to use `trash` instead. This ensures deleted files can be recovered from the system trash.
 
-## Blocked Commands
+## Blocked Patterns
 
-- `rm` / `rm -rf` / `rm -f`
-- `shred`
-- `unlink`
+**Direct commands:**
+- `rm`, `shred`, `unlink`
+
+**Path variants:**
+- `/bin/rm`, `/usr/bin/rm`, `./rm`
+
+**Bypass attempts:**
+- `command rm`, `env rm`, `\rm`
+- `sudo rm`, `xargs rm`
+
+**Subshell execution:**
+- `sh -c "rm ..."`, `bash -c "rm ..."`, `zsh -c "rm ..."`
+
+**Find commands:**
+- `find . -delete`
+- `find . -exec rm {} \;`
 
 ## Allowed Commands
 
 - `git rm` (tracked by git, recoverable)
+- `echo 'rm test'` (quoted strings are safe)
 - All other commands
 
 ## Installation
@@ -31,9 +45,11 @@ brew install trash
 npm install -g trash-cli
 ```
 
-### 3. Install dependencies
+### 3. Clone and install
 
 ```bash
+git clone <repo-url>
+cd claude-rm-rf
 bun install
 ```
 
@@ -50,7 +66,7 @@ Add to your `.claude/settings.json` or `.claude/settings.local.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bun run $CLAUDE_PROJECT_DIR/src/index.ts"
+            "command": "bun run /path/to/claude-rm-rf/src/index.ts"
           }
         ]
       }
@@ -59,10 +75,12 @@ Add to your `.claude/settings.json` or `.claude/settings.local.json`:
 }
 ```
 
+Replace `/path/to/claude-rm-rf` with the actual path, or use `$CLAUDE_PROJECT_DIR` if installing per-project.
+
 ## Development
 
 ```bash
-# Run tests
+# Run tests (34 test cases)
 bun test
 
 # Build standalone executable (optional, ~60MB)
@@ -74,16 +92,19 @@ bun run build
 The hook runs on every `Bash` tool call via the `PreToolUse` event:
 
 1. Parses JSON input from Claude Code (stdin)
-2. Strips quoted strings to avoid false positives (e.g., `echo 'rm test'`)
-3. Checks for destructive patterns at command start or after shell operators (`&&`, `||`, `;`, `|`)
+2. Strips quoted strings to avoid false positives
+3. Checks for destructive patterns
 4. Returns exit code 2 with error message if blocked
 5. Returns exit code 0 to allow the command
 
 ### Pattern Detection
 
 The hook detects destructive commands:
-- At the start of a command
-- After shell operators (`&&`, `||`, `;`, `|`, `$(`, `` ` ``)
-- After `sudo` or `xargs`
+- At the start of a command or after shell operators (`&&`, `||`, `;`, `|`, `$(`, `` ` ``)
+- Via absolute/relative paths (`/bin/rm`, `./rm`)
+- Via shell builtins (`command rm`, `env rm`, `\rm`)
+- Via privilege escalation (`sudo rm`, `xargs rm`)
+- Via subshells (`sh -c`, `bash -c`, `zsh -c`)
+- Via find (`-delete`, `-exec rm`)
 
-Safe patterns like `git rm` are explicitly allowed.
+Quoted strings are stripped first, so `echo 'rm file'` and `git commit -m "rm old"` are allowed.
