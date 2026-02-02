@@ -1,4 +1,4 @@
-# 🛡️ ShellShield v2.0
+# 🛡️ ShellShield
 
 **The ultimate safety shield for your terminal.**
 
@@ -6,14 +6,14 @@ ShellShield is a high-performance OpenCode hook that blocks destructive commands
 
 > **Note:** ShellShield provides robust protection but is not a substitute for regular backups. Use it as your first line of defense.
 
-## ✨ New in v2.0
+## ✨ Features
 
 -   🛡️ **Critical Path Protection**: Automatically blocks deletion of system directories like `/etc`, `/usr`, and project-critical folders like `.git`.
--   Commit First, Delete Later**: Blocks deletion of files with uncommitted Git changes to prevent data loss.
+-   **Commit First, Delete Later**: Blocks deletion of files with uncommitted Git changes to prevent data loss.
 -   🚀 **Volume Threshold Protection**: Intercepts commands targeting a large number of files (default > 50) to prevent globbing accidents.
 -   📜 **Security Audit Log**: Keeps a JSON-formatted log of all intercepted actions in `~/.shellshield/audit.log`.
 -   🧠 **Recursive Subshell Analysis**: Dives deep into nested subshells (`sh -c "bash -c '...' "`) to find hidden threats.
--   Variable Expansion Tracking**: Detects bypass attempts using variables like `CMD=rm; $CMD file`.
+-   **Variable Expansion Tracking**: Detects bypass attempts using variables like `CMD=rm; $CMD file`.
 
 ## 🛡️ Blocked Patterns
 

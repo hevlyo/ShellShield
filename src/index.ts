@@ -240,7 +240,7 @@ async function main(): Promise<void> {
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `ACTION REQUIRED: ${result.suggestion}\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `ShellShield v2.0 - Keeping your terminal safe.`
+        `ShellShield - Keeping your terminal safe.`
       );
       process.exit(2);
     }
