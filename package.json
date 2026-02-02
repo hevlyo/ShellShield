@@ -16,6 +16,10 @@
   "keywords": ["opencode", "hook", "safety", "trash"],
   "license": "MIT",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/shell-quote": "^1.7.5"
+  },
+  "dependencies": {
+    "shell-quote": "^1.8.3"
   }
 }

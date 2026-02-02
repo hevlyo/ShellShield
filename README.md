@@ -7,7 +7,8 @@ An OpenCode hook that blocks destructive file deletion commands and directs user
 ## Blocked Patterns
 
 **Direct commands:**
-- `rm`, `shred`, `unlink`
+- `rm`, `shred`, `unlink`, `wipe`, `srm`
+- `dd` with `of=` (output file)
 
 **Path variants:**
 - `/bin/rm`, `/usr/bin/rm`, `./rm`
@@ -15,9 +16,10 @@ An OpenCode hook that blocks destructive file deletion commands and directs user
 **Bypass attempts:**
 - `command rm`, `env rm`, `\rm`
 - `sudo rm`, `xargs rm`
+- Variable expansion: `CMD=rm; $CMD file`
 
 **Subshell execution:**
-- `sh -c "rm ..."`, `bash -c "rm ..."`, `zsh -c "rm ..."`
+- `sh -c "rm ..."`, `bash -c "rm ..."`, `zsh -c "rm ..."` (recursive up to 5 levels)
 
 **Find commands:**
 - `find . -delete`
@@ -28,6 +30,39 @@ An OpenCode hook that blocks destructive file deletion commands and directs user
 - `git rm` (tracked by git, recoverable)
 - `echo 'rm test'` (quoted strings are safe)
 - All other commands
+
+## Configuration
+
+You can customize the blocked and allowed commands using environment variables:
+
+- `OPENCODE_BLOCK_COMMANDS`: Comma-separated list of additional commands to block.
+- `OPENCODE_ALLOW_COMMANDS`: Comma-separated list of commands to explicitly allow (even if they are in the default blocked list).
+
+Example in `.opencode/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /path/to/opencode-rm-rf/src/index.ts",
+            "env": {
+              "OPENCODE_BLOCK_COMMANDS": "custom-delete",
+              "OPENCODE_ALLOW_COMMANDS": "rm"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Replace `/path/to/opencode-rm-rf` with the actual path, or use `$OPENCODE_PROJECT_DIR` if installing per-project.
 
 ## Installation
 
@@ -57,32 +92,12 @@ bun install
 
 ### 4. Configure OpenCode
 
-Add to your `.opencode/settings.json` or `.opencode/settings.local.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun run /path/to/opencode-rm-rf/src/index.ts"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Replace `/path/to/opencode-rm-rf` with the actual path, or use `$OPENCODE_PROJECT_DIR` if installing per-project.
+(See Configuration section above)
 
 ## Development
 
 ```bash
-# Run tests (34 test cases)
+# Run tests (44 test cases)
 bun test
 
 # Build standalone executable (optional, ~60MB)
@@ -94,19 +109,9 @@ bun run build
 The hook runs on every `Bash` tool call via the `PreToolUse` event:
 
 1. Parses JSON input from OpenCode (stdin)
-2. Strips quoted strings to avoid false positives
-3. Checks for destructive patterns
-4. Returns exit code 2 with error message if blocked
-5. Returns exit code 0 to allow the command
-
-### Pattern Detection
-
-The hook detects destructive commands:
-- At the start of a command or after shell operators (`&&`, `||`, `;`, `|`, `$(`, `` ` ``)
-- Via absolute/relative paths (`/bin/rm`, `./rm`)
-- Via shell builtins (`command rm`, `env rm`, `\rm`)
-- Via privilege escalation (`sudo rm`, `xargs rm`)
-- Via subshells (`sh -c`, `bash -c`, `zsh -c`)
-- Via find (`-delete`, `-exec rm`)
-
-Quoted strings are stripped first, so `echo 'rm file'` and `git commit -m "rm old"` are allowed.
+2. Uses `shell-quote` to parse the command into tokens, accurately identifying command positions.
+3. Recursively checks subshells (`sh -c`, etc.) up to 5 levels deep.
+4. Tracks variable assignments (e.g., `CMD=rm; $CMD file`) to prevent bypasses.
+5. Checks for destructive patterns in command positions.
+6. Returns exit code 2 with a helpful suggestion if blocked.
+7. Returns exit code 0 to allow the command.

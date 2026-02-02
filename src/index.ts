@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { parse } from "shell-quote";
+
 /**
  * Block destructive file deletion commands and suggest using trash instead.
  * This is a OpenCode hook that runs on PreToolUse for Bash commands.
@@ -10,79 +12,159 @@ interface ToolInput {
   };
 }
 
+const BLOCKED_COMMANDS = new Set(["rm", "shred", "unlink", "wipe", "srm"]);
+const SHELL_COMMANDS = new Set(["sh", "bash", "zsh", "dash"]);
+
 /**
- * Remove quoted strings to avoid false positives on commands like echo 'rm test'.
+ * Get configuration from environment variables.
  */
-function stripQuotes(command: string): string {
-  // Remove double-quoted strings (handles escapes)
-  let stripped = command.replace(/"(?:[^"\\]|\\.)*"/g, '""');
-  // Remove single-quoted strings (no escapes in single quotes)
-  stripped = stripped.replace(/'[^']*'/g, "''");
-  return stripped;
+function getConfiguration() {
+    const blocked = new Set(BLOCKED_COMMANDS);
+    const allowed = new Set<string>();
+
+    if (process.env.OPENCODE_BLOCK_COMMANDS) {
+        process.env.OPENCODE_BLOCK_COMMANDS.split(",").forEach(cmd => blocked.add(cmd.trim().toLowerCase()));
+    }
+
+    if (process.env.OPENCODE_ALLOW_COMMANDS) {
+        process.env.OPENCODE_ALLOW_COMMANDS.split(",").forEach(cmd => allowed.add(cmd.trim().toLowerCase()));
+    }
+
+    return { blocked, allowed };
+}
+
+interface BlockResult {
+  blocked: boolean;
+  suggestion?: string;
 }
 
 /**
- * Check if command contains actual destructive commands (not in quotes).
+ * Check if a command is destructive and return a suggestion if so.
  */
-function containsDestructiveCommand(command: string): boolean {
-  const stripped = stripQuotes(command);
+function checkDestructive(command: string, depth = 0): BlockResult {
+  if (depth > 5) return { blocked: false };
 
-  // Check for safe patterns first (git rm is fine)
-  if (/\bgit\s+rm\b/.test(stripped)) {
-    return false;
+  const { blocked: configBlocked, allowed: configAllowed } = getConfiguration();
+  const vars: Record<string, string> = {};
+  
+  const entries = parse(command, (key) => {
+      return vars[key] || `$${key}`;
+  });
+  
+  let nextMustBeCommand = true;
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+
+    if (typeof entry !== "string") {
+        if (typeof entry === "object" && "op" in entry) {
+            nextMustBeCommand = true;
+        }
+        continue;
+    }
+
+    if (!nextMustBeCommand) {
+        if (entry.includes("=") && !entry.startsWith("-")) {
+            const [key, ...valParts] = entry.split("=");
+            if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+                vars[key] = valParts.join("=");
+            }
+        }
+        continue;
+    }
+
+    nextMustBeCommand = false;
+
+    if (entry.includes("=") && !entry.startsWith("-")) {
+        const [key, ...valParts] = entry.split("=");
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+            vars[key] = valParts.join("=");
+        }
+        nextMustBeCommand = true;
+        continue;
+    }
+
+    const normalizedEntry = entry.toLowerCase();
+
+    if (["sudo", "xargs", "command", "env"].includes(normalizedEntry)) {
+      nextMustBeCommand = true;
+      continue;
+    }
+
+    if (normalizedEntry === "git" && i + 1 < entries.length) {
+      const next = entries[i + 1];
+      if (typeof next === "string" && next.toLowerCase() === "rm") {
+        i++;
+        continue;
+      }
+    }
+
+    const basename = entry.split("/").pop() ?? "";
+    const cmdName = entry.startsWith("\\") ? entry.slice(1) : basename;
+
+    let resolvedCmd = cmdName.toLowerCase();
+    if (cmdName.startsWith("$")) {
+        const varName = cmdName.slice(1);
+        resolvedCmd = (vars[varName] || cmdName).split("/").pop()?.toLowerCase() ?? "";
+    }
+
+    if (configAllowed.has(resolvedCmd)) {
+        continue;
+    }
+
+    if (configBlocked.has(resolvedCmd)) {
+        let suggestion = "trash <files>";
+        if (resolvedCmd === "rm") {
+            const args = entries.slice(i + 1).filter(e => typeof e === "string") as string[];
+            const nonFlags = args.filter(a => !a.startsWith("-"));
+            if (nonFlags.length > 0) {
+                suggestion = `trash ${nonFlags.join(" ")}`;
+            }
+        }
+        return { blocked: true, suggestion };
+    }
+
+    if (resolvedCmd === "find") {
+        const remaining = entries.slice(i + 1);
+        if (remaining.some(e => typeof e === "string" && e.toLowerCase() === "-delete")) {
+            return { blocked: true, suggestion: "trash <files>" };
+        }
+        const execIdx = remaining.findIndex(e => typeof e === "string" && e.toLowerCase() === "-exec");
+        if (execIdx !== -1 && execIdx + 1 < remaining.length) {
+            const execCmd = remaining[execIdx + 1];
+            if (typeof execCmd === "string" && configBlocked.has(execCmd.split("/").pop()?.toLowerCase() ?? "")) {
+                return { blocked: true, suggestion: "trash <files>" };
+            }
+        }
+    }
+
+    if (resolvedCmd === "dd") {
+        const remaining = entries.slice(i + 1);
+        if (remaining.some(e => typeof e === "string" && e.toLowerCase().startsWith("of="))) {
+            return { blocked: true, suggestion: "be careful with dd of=" };
+        }
+    }
+
+    if (SHELL_COMMANDS.has(resolvedCmd)) {
+        const cIdx = entries.slice(i + 1).findIndex(e => typeof e === "string" && e === "-c");
+        if (cIdx !== -1 && i + 1 + cIdx + 1 < entries.length) {
+            const subshellCmd = entries[i + 1 + cIdx + 1];
+            if (typeof subshellCmd === "string") {
+                const result = checkDestructive(subshellCmd, depth + 1);
+                if (result.blocked) return result;
+            }
+        }
+    }
   }
 
-  // Subshell patterns need to check the ORIGINAL command since
-  // the dangerous command is intentionally inside quotes
-  const subshellPatterns = [
-    /\b(?:sh|bash|zsh|dash)\s+-c\s+.*\brm\b/,
-    /\b(?:sh|bash|zsh|dash)\s+-c\s+.*\bshred\b/,
-    /\b(?:sh|bash|zsh|dash)\s+-c\s+.*\bunlink\b/,
-    /\b(?:sh|bash|zsh|dash)\s+-c\s+.*\bfind\b.*-delete\b/,
-  ];
-
-  if (subshellPatterns.some((pattern) => pattern.test(command))) {
-    return true;
-  }
-
-  // Patterns that indicate rm/shred/unlink being used as actual commands:
-  // - At start of command
-  // - After shell operators: &&, ||, ;, |, $(, `
-  // - After sudo, xargs, command, env
-  // - With absolute/relative paths like /bin/rm, /usr/bin/rm, ./rm
-  const destructivePatterns = [
-    // Basic commands at start or after operators
-    /(?:^|&&|\|\||;|\||\$\(|`)\s*rm\b/,
-    /(?:^|&&|\|\||;|\||\$\(|`)\s*shred\b/,
-    /(?:^|&&|\|\||;|\||\$\(|`)\s*unlink\b/,
-
-    // Absolute/relative paths to rm
-    /(?:^|&&|\|\||;|\||\$\(|`)\s*\/.*\/rm\b/,
-    /(?:^|&&|\|\||;|\||\$\(|`)\s*\.\/rm\b/,
-
-    // Via sudo, xargs, command, env
-    /\bsudo\s+rm\b/,
-    /\bsudo\s+\/.*\/rm\b/,
-    /\bxargs\s+rm\b/,
-    /\bxargs\s+\/.*\/rm\b/,
-    /\bcommand\s+rm\b/,
-    /\benv\s+rm\b/,
-
-    // Backslash escape to bypass aliases
-    /(?:^|&&|\|\||;|\||\$\(|`)\s*\\rm\b/,
-
-    // find with -delete or -exec rm
-    /\bfind\b.*\s-delete\b/,
-    /\bfind\b.*-exec\s+rm\b/,
-    /\bfind\b.*-exec\s+\/.*\/rm\b/,
-  ];
-
-  return destructivePatterns.some((pattern) => pattern.test(stripped));
+  return { blocked: false };
 }
 
 async function main(): Promise<void> {
   try {
     const input = await Bun.stdin.text();
+    if (!input) process.exit(0);
+    
     const data: ToolInput = JSON.parse(input);
     const command = data.tool_input?.command ?? "";
 
@@ -90,22 +172,22 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
-    if (containsDestructiveCommand(command)) {
+    const result = checkDestructive(command);
+
+    if (result.blocked) {
       console.error(
-        "BLOCKED: Do not use destructive file deletion commands " +
-          "(rm, shred, unlink). Use the 'trash' CLI instead:\n" +
-          "  - trash file.txt\n" +
-          "  - trash directory/\n\n" +
-          "If trash is not installed:\n" +
-          "  - macOS: brew install trash\n" +
-          "  - Linux/npm: npm install -g trash-cli"
+        `BLOCKED: Destructive command detected.\n` +
+        `Instead of deleting permanently, use 'trash':\n` +
+        `  ${result.suggestion ?? "trash <file>"}\n\n` +
+        `If trash is not installed:\n` +
+        `  - macOS: brew install trash\n` +
+        `  - Linux/npm: npm install -g trash-cli`
       );
       process.exit(2);
     }
 
     process.exit(0);
   } catch {
-    // Parse errors allow through (match Python behavior)
     process.exit(0);
   }
 }
