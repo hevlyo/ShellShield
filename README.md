@@ -1,10 +1,12 @@
-# OpenCode Block Destructive Commands
+# 🛡️ ShellShield
 
-An OpenCode hook that blocks destructive file deletion commands and directs users to use `trash` instead. This ensures deleted files can be recovered from the system trash.
+**The ultimate safety shield for your terminal.**
 
-> **Note:** This is a best-effort attempt to catch common destructive patterns, not a comprehensive security barrier. There will always be edge cases and creative ways to delete files that aren't covered. Use this as one layer of defense, not the only one.
+ShellShield is an OpenCode hook that blocks destructive file deletion commands and directs users to use `trash` instead. This ensures deleted files can be recovered from the system trash.
 
-## Blocked Patterns
+> **Note:** This is a best-effort attempt to catch common destructive patterns, not a comprehensive security barrier. Use this as one layer of defense, not the only one.
+
+## 🛡️ Blocked Patterns
 
 **Direct commands:**
 - `rm`, `shred`, `unlink`, `wipe`, `srm`
@@ -25,13 +27,13 @@ An OpenCode hook that blocks destructive file deletion commands and directs user
 - `find . -delete`
 - `find . -exec rm {} \;`
 
-## Allowed Commands
+## ✅ Allowed Commands
 
 - `git rm` (tracked by git, recoverable)
 - `echo 'rm test'` (quoted strings are safe)
 - All other commands
 
-## Configuration
+## ⚙️ Configuration
 
 You can customize the blocked and allowed commands using environment variables:
 
@@ -49,7 +51,7 @@ Example in `.opencode/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bun run /path/to/opencode-rm-rf/src/index.ts",
+            "command": "bun run /path/to/shellshield/src/index.ts",
             "env": {
               "OPENCODE_BLOCK_COMMANDS": "custom-delete",
               "OPENCODE_ALLOW_COMMANDS": "rm"
@@ -62,9 +64,7 @@ Example in `.opencode/settings.json`:
 }
 ```
 
-Replace `/path/to/opencode-rm-rf` with the actual path, or use `$OPENCODE_PROJECT_DIR` if installing per-project.
-
-## Installation
+## 🚀 Installation
 
 ### 1. Install Bun
 
@@ -86,7 +86,7 @@ npm install -g trash-cli
 
 ```bash
 git clone <repo-url>
-cd opencode-rm-rf
+cd shellshield
 bun install
 ```
 
@@ -94,7 +94,7 @@ bun install
 
 (See Configuration section above)
 
-## Development
+## 🛠️ Development
 
 ```bash
 # Run tests (44 test cases)
@@ -104,7 +104,7 @@ bun test
 bun run build
 ```
 
-## How It Works
+## 🧠 How It Works
 
 The hook runs on every `Bash` tool call via the `PreToolUse` event:
 

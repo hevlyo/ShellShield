@@ -176,12 +176,10 @@ async function main(): Promise<void> {
 
     if (result.blocked) {
       console.error(
-        `BLOCKED: Destructive command detected.\n` +
+        `🛡️  ShellShield BLOCKED: Destructive command detected.\n` +
         `Instead of deleting permanently, use 'trash':\n` +
         `  ${result.suggestion ?? "trash <file>"}\n\n` +
-        `If trash is not installed:\n` +
-        `  - macOS: brew install trash\n` +
-        `  - Linux/npm: npm install -g trash-cli`
+        `ShellShield helps you keep your files safe. To bypass this, see the documentation.`
       );
       process.exit(2);
     }

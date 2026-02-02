@@ -1,16 +1,16 @@
 {
-  "name": "opencode-block-destructive-commands",
-  "version": "1.0.0",
-  "description": "OpenCode hook to block destructive file deletion commands",
+  "name": "@opencode/shellshield",
+  "version": "1.1.0",
+  "description": "The ultimate safety shield for your terminal. Prevents accidental file destruction.",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "dev": "bun run src/index.ts",
     "test": "bun test",
-    "build": "bun build src/index.ts --compile --outfile dist/opencode-block-destructive-commands",
-    "build:linux": "bun build src/index.ts --compile --target=bun-linux-x64 --outfile dist/opencode-block-destructive-commands-linux",
-    "build:macos": "bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile dist/opencode-block-destructive-commands-macos",
-    "build:windows": "bun build src/index.ts --compile --target=bun-windows-x64 --outfile dist/opencode-block-destructive-commands-windows.exe",
+    "build": "bun build src/index.ts --compile --outfile dist/shellshield",
+    "build:linux": "bun build src/index.ts --compile --target=bun-linux-x64 --outfile dist/shellshield-linux",
+    "build:macos": "bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile dist/shellshield-macos",
+    "build:windows": "bun build src/index.ts --compile --target=bun-windows-x64 --outfile dist/shellshield-windows.exe",
     "build:all": "bun run build:linux && bun run build:macos && bun run build:windows"
   },
   "keywords": ["opencode", "hook", "safety", "trash"],
