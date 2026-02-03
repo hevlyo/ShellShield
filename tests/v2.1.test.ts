@@ -1,11 +1,39 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, afterAll } from "bun:test";
 import { spawn, spawnSync } from "bun";
 import { join } from "path";
-import { writeFileSync, rmSync, existsSync, mkdirSync } from "fs";
-import { homedir } from "os";
+import { writeFileSync, rmSync, existsSync, mkdtempSync, readFileSync } from "fs";
+import { tmpdir } from "os";
 
-const HOOK_PATH = join(import.meta.dir, "..", "src", "index.ts");
-const LOCAL_CONFIG = join(process.cwd(), ".shellshield.json");
+const PROJECT_ROOT = join(import.meta.dir, "..");
+const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
+const LOCAL_CONFIG = join(PROJECT_ROOT, ".shellshield.json");
+const LOCAL_CONFIG_SRC = join(PROJECT_ROOT, "src", ".shellshield.json");
+
+function writeLocalConfig(config: Record<string, unknown>) {
+  const content = JSON.stringify(config);
+  writeFileSync(LOCAL_CONFIG, content);
+  writeFileSync(LOCAL_CONFIG_SRC, content);
+}
+
+async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
+  if (!stream) return "";
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let result = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) result += decoder.decode(value, { stream: true });
+    }
+    result += decoder.decode();
+    return result;
+  } catch {
+    return result;
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 async function runHook(
   command: string,
@@ -19,7 +47,8 @@ async function runHook(
     stdin: "pipe",
     stderr: "pipe",
     stdout: "pipe",
-    env: { ...process.env, ...env }
+    env: { ...process.env, ...env },
+    cwd: PROJECT_ROOT
   });
 
   if (proc.stdin) {
@@ -29,15 +58,9 @@ async function runHook(
 
   const exitCode = await proc.exited;
   
-  let stderr = "";
-  if (proc.stderr) {
-      stderr = await new Response(proc.stderr).text();
-  }
+  const stderr = await readStream(proc.stderr);
   
-  let stdout = "";
-  if (proc.stdout) {
-      stdout = await new Response(proc.stdout).text();
-  }
+  const stdout = await readStream(proc.stdout);
 
   return { exitCode, stderr, stdout };
 }
@@ -46,12 +69,13 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
   describe("JSON Configuration", () => {
     afterAll(() => {
       if (existsSync(LOCAL_CONFIG)) rmSync(LOCAL_CONFIG);
+      if (existsSync(LOCAL_CONFIG_SRC)) rmSync(LOCAL_CONFIG_SRC);
     });
 
     test("loads blocked commands from .shellshield.json", async () => {
-      writeFileSync(LOCAL_CONFIG, JSON.stringify({
+      writeLocalConfig({
           blocked: ["custom-kill"]
-      }));
+      });
 
       const { exitCode, stderr } = await runHook("custom-kill target");
       expect(exitCode).toBe(2);
@@ -59,13 +83,14 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
     });
 
     test("loads trusted domains from .shellshield.json", async () => {
-        writeFileSync(LOCAL_CONFIG, JSON.stringify({
+        writeLocalConfig({
             trustedDomains: ["my-safe-site.com"]
-        }));
+        });
 
         const { exitCode } = await runHook("curl https://my-safe-site.com/install.sh | bash");
         expect(exitCode).toBe(0);
     });
+
   });
 
   describe("Trusted Domains", () => {
@@ -98,7 +123,8 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
   describe("Standalone Mode", () => {
       test("supports --check flag for direct command validation", async () => {
           const proc = spawnSync({
-              cmd: ["bun", "run", HOOK_PATH, "--check", "rm -rf /"]
+              cmd: ["bun", "run", HOOK_PATH, "--check", "rm -rf /"],
+              cwd: PROJECT_ROOT
           });
           expect(proc.exitCode).toBe(2);
           expect(proc.stderr.toString()).toContain("CRITICAL PATH PROTECTED");
@@ -107,7 +133,8 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
       test("supports --init flag for shell integration", async () => {
           const proc = spawnSync({
               cmd: ["bun", "run", HOOK_PATH, "--init"],
-              env: { ...process.env, SHELL: "/bin/zsh" }
+              env: { ...process.env, SHELL: "/bin/zsh" },
+              cwd: PROJECT_ROOT
           });
           expect(proc.exitCode).toBe(0);
           expect(proc.stdout.toString()).toContain("add-zsh-hook preexec");
@@ -116,7 +143,8 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
       test("supports raw command input via stdin (non-JSON)", async () => {
           const proc = spawn({
               cmd: ["bun", "run", HOOK_PATH],
-              stdin: "pipe"
+              stdin: "pipe",
+              cwd: PROJECT_ROOT
           });
           proc.stdin.write("rm -rf /");
           proc.stdin.end();
@@ -127,6 +155,22 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
       test("respects SHELLSHIELD_SKIP bypass variable", async () => {
         const { exitCode } = await runHook("rm -rf /", [], { SHELLSHIELD_SKIP: "1" });
         expect(exitCode).toBe(0);
+      });
+  });
+
+  describe("Audit Logging", () => {
+      test("writes audit log entry for blocked command", async () => {
+          const tempHome = mkdtempSync(join(tmpdir(), "shellshield-audit-"));
+          const { exitCode } = await runHook("rm -rf /", [], { HOME: tempHome });
+          expect(exitCode).toBe(2);
+
+          const auditPath = join(tempHome, ".shellshield", "audit.log");
+          const content = readFileSync(auditPath, "utf8").trim();
+          const entry = JSON.parse(content.split("\n")[0]);
+          expect(entry.blocked).toBe(true);
+          expect(entry.command).toBe("rm -rf /");
+
+          rmSync(tempHome, { recursive: true, force: true });
       });
   });
 });

@@ -12,6 +12,26 @@ function setupTestDir() {
   mkdirSync(TEST_DIR, { recursive: true });
 }
 
+async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
+  if (!stream) return "";
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let result = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) result += decoder.decode(value, { stream: true });
+    }
+    result += decoder.decode();
+    return result;
+  } catch {
+    return result;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 async function runHook(
   command: string,
   env: Record<string, string> = {}
@@ -26,11 +46,13 @@ async function runHook(
     env: { ...process.env, ...env }
   });
 
-  proc.stdin.write(input);
-  proc.stdin.end();
+  if (proc.stdin) {
+    proc.stdin.write(input);
+    proc.stdin.end();
+  }
 
   const exitCode = await proc.exited;
-  const stderr = await new Response(proc.stderr).text();
+  const stderr = await readStream(proc.stderr);
 
   return { exitCode, stderr };
 }
@@ -75,6 +97,15 @@ describe("ShellShield v2.0 - Threshold Protection", () => {
     test("blocks if too many files are targeted (e.g. > 50)", async () => {
         const manyFiles = Array.from({ length: 60 }, (_, i) => `file${i}.txt`).join(" ");
         const { exitCode, stderr } = await runHook(`rm ${manyFiles}`);
+        expect(exitCode).toBe(2);
+        expect(stderr).toContain("VOLUME THRESHOLD EXCEEDED");
+    });
+
+    test("respects SHELLSHIELD_THRESHOLD env var", async () => {
+        const manyFiles = Array.from({ length: 6 }, (_, i) => `file${i}.txt`).join(" ");
+        const { exitCode, stderr } = await runHook(`rm ${manyFiles}`, {
+            SHELLSHIELD_THRESHOLD: "5"
+        });
         expect(exitCode).toBe(2);
         expect(stderr).toContain("VOLUME THRESHOLD EXCEEDED");
     });

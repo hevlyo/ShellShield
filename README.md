@@ -33,6 +33,9 @@ ShellShield is a high-performance, intelligent shell hook that guards your gate.
 -   **Homograph Defense**: Blocks visually identical malicious domains (e.g., `іnstall.com` vs `install.com`).
 -   **Injection Protection**: Intercepts ANSI escapes and hidden zero-width characters that manipulate your terminal output.
 -   **Safe Pipe-to-Shell**: Flags dangerous `curl | bash` patterns, while allowing trusted domains (GitHub, Docker, etc.).
+-   **Command Substitution Guard**: Blocks `eval $(curl ...)` and `sh -c "$(curl ...)"` execution chains.
+-   **Encoded Payload Guard**: Blocks `base64 -d | sh` and `xxd -r -p | sh` patterns.
+-   **Download-and-Exec Guard**: Blocks `curl -o file && sh file` one-liners.
 -   **Credential Guard**: Detects and blocks commands containing plain-text passwords in URLs.
 
 ### 🚜 Terminal Governance
@@ -100,7 +103,7 @@ Customize your shield with a `.shellshield.json` file in your home or project di
 
 ## 🛠️ Development & Testing
 
-ShellShield is built with **TDD (Test-Driven Development)**. We have **71+ test cases** covering bypasses, security threats, and edge cases.
+ShellShield is built with **TDD (Test-Driven Development)**. We have **80+ test cases** covering bypasses, security threats, and edge cases.
 
 ```bash
 bun test

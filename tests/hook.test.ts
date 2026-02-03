@@ -4,6 +4,26 @@ import { join } from "path";
 
 const HOOK_PATH = join(import.meta.dir, "..", "src", "index.ts");
 
+async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
+  if (!stream) return "";
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let result = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) result += decoder.decode(value, { stream: true });
+    }
+    result += decoder.decode();
+    return result;
+  } catch {
+    return result;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 async function runHook(
   command: string
 ): Promise<{ exitCode: number; stderr: string }> {
@@ -16,11 +36,13 @@ async function runHook(
     stdout: "pipe",
   });
 
-  proc.stdin.write(input);
-  proc.stdin.end();
+  if (proc.stdin) {
+    proc.stdin.write(input);
+    proc.stdin.end();
+  }
 
   const exitCode = await proc.exited;
-  const stderr = await new Response(proc.stderr).text();
+  const stderr = await readStream(proc.stderr);
 
   return { exitCode, stderr };
 }
@@ -220,5 +242,11 @@ describe("Edge cases", () => {
 
     const exitCode = await proc.exited;
     expect(exitCode).toBe(0);
+  });
+
+  test("malformed substitution blocks", async () => {
+    const { exitCode, stderr } = await runHook("rm ${}");
+    expect(exitCode).toBe(2);
+    expect(stderr).toContain("MALFORMED COMMAND SYNTAX");
   });
 });
