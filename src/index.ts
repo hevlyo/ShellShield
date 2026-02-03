@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { parse } from "shell-quote";
 import { execSync } from "child_process";
-import { appendFileSync, mkdirSync, existsSync } from "fs";
+import { appendFileSync, mkdirSync, existsSync, readFileSync } from "fs";
 import { join, dirname, basename } from "path";
 import { homedir } from "os";
 
@@ -14,8 +14,20 @@ interface ToolInput {
 const DEFAULT_BLOCKED = new Set(["rm", "shred", "unlink", "wipe", "srm"]);
 const SHELL_COMMANDS = new Set(["sh", "bash", "zsh", "dash"]);
 const CRITICAL_PATHS = new Set([
-    "/", "/etc", "/usr", "/var", "/bin", "/sbin", "/lib", "/boot", "/root", "/dev", "/proc", "/sys"
+    "/", "/etc", "/usr", "/var", "/bin", "/sbin", "/lib", "/boot", "/root", "/dev", "/proc", "/sys",
+    "c:/windows", "c:/windows/system32", "c:/program files", "c:/program files (x86)", "c:/users",
+    "c:windows", "c:windowssystem32", "c:program files", "c:users"
 ]);
+const DEFAULT_TRUSTED_DOMAINS = [
+    "github.com",
+    "raw.githubusercontent.com",
+    "get.docker.com",
+    "sh.rustup.rs",
+    "bun.sh",
+    "install.python-poetry.org",
+    "raw.github.com"
+];
+
 const SENSITIVE_PATTERNS = [
     /\/\.ssh\//,
     /\/\.bashrc$/,
@@ -23,13 +35,75 @@ const SENSITIVE_PATTERNS = [
     /\/\.profile$/,
     /\/\.gitconfig$/
 ];
-const VOLUME_THRESHOLD = parseInt(process.env.SHELLSHIELD_THRESHOLD || "50", 10);
+
+interface Config {
+    blocked: Set<string>;
+    allowed: Set<string>;
+    trustedDomains: string[];
+    threshold: number;
+}
+
+function loadConfigFile(): Partial<Config> {
+    const searchPaths = [
+        join(process.cwd(), ".shellshield.json"),
+        join(homedir(), ".shellshield.json")
+    ];
+
+    for (const path of searchPaths) {
+        if (existsSync(path)) {
+            try {
+                const content = JSON.parse(readFileSync(path, "utf8"));
+                return {
+                    blocked: content.blocked ? new Set(content.blocked.map((c: string) => c.toLowerCase())) : undefined,
+                    allowed: content.allowed ? new Set(content.allowed.map((c: string) => c.toLowerCase())) : undefined,
+                    trustedDomains: content.trustedDomains,
+                    threshold: content.threshold
+                };
+            } catch {
+            }
+        }
+    }
+    return {};
+}
+
+function getConfiguration(): Config {
+    const fileConfig = loadConfigFile();
+    
+    const blocked = fileConfig.blocked || new Set(DEFAULT_BLOCKED);
+    const allowed = fileConfig.allowed || new Set<string>();
+    const trustedDomains = fileConfig.trustedDomains || DEFAULT_TRUSTED_DOMAINS;
+    const threshold = fileConfig.threshold || parseInt(process.env.SHELLSHIELD_THRESHOLD || "50", 10);
+
+    if (process.env.OPENCODE_BLOCK_COMMANDS) {
+        process.env.OPENCODE_BLOCK_COMMANDS.split(",").forEach(cmd => blocked.add(cmd.trim().toLowerCase()));
+    }
+
+    if (process.env.OPENCODE_ALLOW_COMMANDS) {
+        process.env.OPENCODE_ALLOW_COMMANDS.split(",").forEach(cmd => allowed.add(cmd.trim().toLowerCase()));
+    }
+
+    return { blocked, allowed, trustedDomains, threshold };
+}
+
+interface BlockResult {
+  blocked: boolean;
+  reason?: string;
+  suggestion?: string;
+}
 
 function isCriticalPath(path: string): boolean {
-    if (path === "/") return true;
-    const normalized = path.replace(/\/+$/, "");
-    if (CRITICAL_PATHS.has(normalized)) return true;
-    if (normalized === ".git" || normalized.endsWith("/.git")) return true;
+    let normalized = path.toLowerCase().replace(/\\/g, "/");
+    
+    if (/^[a-z]:[^\/]/.test(normalized)) {
+        normalized = normalized[0] + ":" + "/" + normalized.slice(2);
+    }
+    
+    normalized = normalized.replace(/\/+$/, "");
+    if (!normalized || normalized === "/" || /^[a-z]:$/.test(normalized)) return true;
+    
+    if (CRITICAL_PATHS.has(normalized) || CRITICAL_PATHS.has(normalized.replace(/\//g, ""))) return true;
+    
+    if (normalized === ".git" || normalized.endsWith("/.git") || normalized.endsWith(".git")) return true;
     return false;
 }
 
@@ -57,17 +131,6 @@ function hasHomograph(str: string): { detected: boolean; char?: string } {
     return { detected: false };
 }
 
-function hasTerminalInjection(str: string): boolean {
-    const injectionPatterns = [
-        /\x1b\[/, 
-        /\u200B/, 
-        /\u200C/, 
-        /\u200D/, 
-        /\uFEFF/  
-    ];
-    return injectionPatterns.some(p => p.test(str));
-}
-
 interface TerminalInjectionResult {
     detected: boolean;
     reason?: string;
@@ -83,25 +146,13 @@ function checkTerminalInjection(str: string): TerminalInjectionResult {
     return { detected: false };
 }
 
-function getConfiguration() {
-    const blocked = new Set(DEFAULT_BLOCKED);
-    const allowed = new Set<string>();
-
-    if (process.env.OPENCODE_BLOCK_COMMANDS) {
-        process.env.OPENCODE_BLOCK_COMMANDS.split(",").forEach(cmd => blocked.add(cmd.trim().toLowerCase()));
+function isTrustedDomain(url: string, trustedDomains: string[]): boolean {
+    try {
+        const domain = new URL(url).hostname;
+        return trustedDomains.some(trusted => domain === trusted || domain.endsWith("." + trusted));
+    } catch {
+        return false;
     }
-
-    if (process.env.OPENCODE_ALLOW_COMMANDS) {
-        process.env.OPENCODE_ALLOW_COMMANDS.split(",").forEach(cmd => allowed.add(cmd.trim().toLowerCase()));
-    }
-
-    return { blocked, allowed };
-}
-
-interface BlockResult {
-  blocked: boolean;
-  reason?: string;
-  suggestion?: string;
 }
 
 function hasUncommittedChanges(files: string[]): string[] {
@@ -153,7 +204,7 @@ function checkDestructive(command: string, depth = 0): BlockResult {
       return { blocked: true, reason: injection.reason!, suggestion: "Command contains ANSI escape sequences or hidden characters that can manipulate terminal output." };
   }
 
-  const { blocked: configBlocked, allowed: configAllowed } = getConfiguration();
+  const { blocked: configBlocked, allowed: configAllowed, trustedDomains, threshold } = getConfiguration();
   const vars: Record<string, string> = {};
   
   const entries = parse(command, (key) => {
@@ -224,6 +275,11 @@ function checkDestructive(command: string, depth = 0): BlockResult {
         if (pipeIdx !== -1) {
             const nextPart = remaining[pipeIdx + 1];
             if (typeof nextPart === "string" && SHELL_COMMANDS.has(nextPart.split("/").pop()?.toLowerCase() ?? "")) {
+                const url = args.find(a => a.startsWith("http"));
+                if (url && isTrustedDomain(url, trustedDomains)) {
+                    continue;
+                }
+
                 if (args.some(a => a.startsWith("http://"))) {
                     return { blocked: true, reason: "INSECURE TRANSPORT DETECTED", suggestion: "Piping plain HTTP content to a shell is dangerous. Use HTTPS." };
                 }
@@ -285,7 +341,7 @@ function checkDestructive(command: string, depth = 0): BlockResult {
         }
 
         const targetFiles = args.filter(a => !a.startsWith("-"));
-        if (targetFiles.length > VOLUME_THRESHOLD) {
+        if (targetFiles.length > threshold) {
             return { blocked: true, reason: "VOLUME THRESHOLD EXCEEDED", suggestion: `You are trying to delete ${targetFiles.length} files. Use a more specific command.` };
         }
 
@@ -333,12 +389,63 @@ function checkDestructive(command: string, depth = 0): BlockResult {
 }
 
 async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+
+  if (process.env.SHELLSHIELD_SKIP === "1") {
+      process.exit(0);
+  }
+
+  if (args.includes("--init")) {
+      const shell = process.env.SHELL?.split("/").pop() || "bash";
+      if (shell === "zsh") {
+          console.log(`
+# ShellShield Zsh Integration
+_shellshield_preexec() {
+    # Skip if SHELLSHIELD_SKIP is set
+    if [[ -n "$SHELLSHIELD_SKIP" ]]; then return 0; fi
+    # Run shellshield check
+    "${process.argv[1]}" --check "$1" || return $?
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec _shellshield_preexec
+          `);
+      } else {
+          console.log(`
+# ShellShield Bash Integration
+_shellshield_bash_preexec() {
+    if [[ -n "$SHELLSHIELD_SKIP" ]]; then return 0; fi
+    "${process.argv[1]}" --check "$BASH_COMMAND" || return $?
+}
+trap '_shellshield_bash_preexec' DEBUG
+          `);
+      }
+      process.exit(0);
+  }
+
+  if (args.includes("--check")) {
+      const cmdIdx = args.indexOf("--check");
+      const command = args[cmdIdx + 1];
+      if (!command) process.exit(0);
+      
+      const result = checkDestructive(command);
+      if (result.blocked) {
+          showBlockedMessage(result);
+          process.exit(2);
+      }
+      process.exit(0);
+  }
+
   try {
     const input = await Bun.stdin.text();
     if (!input) process.exit(0);
     
-    const data: ToolInput = JSON.parse(input);
-    const command = data.tool_input?.command ?? "";
+    let command = "";
+    try {
+        const data: ToolInput = JSON.parse(input);
+        command = data.tool_input?.command ?? "";
+    } catch {
+        command = input.trim();
+    }
 
     if (!command) {
       process.exit(0);
@@ -348,20 +455,26 @@ async function main(): Promise<void> {
     logAudit(command, result);
 
     if (result.blocked) {
-      console.error(
-        `🛡️  ShellShield BLOCKED: ${result.reason}\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `ACTION REQUIRED: ${result.suggestion}\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `ShellShield - Keeping your terminal safe.`
-      );
+      showBlockedMessage(result);
       process.exit(2);
     }
 
     process.exit(0);
-  } catch {
+  } catch (e) {
+    if (process.env.DEBUG) console.error(e);
     process.exit(0);
   }
+}
+
+function showBlockedMessage(result: BlockResult) {
+    console.error(
+        `🛡️  ShellShield BLOCKED: ${result.reason}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `ACTION REQUIRED: ${result.suggestion}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `Bypass: SHELLSHIELD_SKIP=1 <command>\n` +
+        `ShellShield - Keeping your terminal safe.`
+      );
 }
 
 main();
