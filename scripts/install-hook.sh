@@ -15,34 +15,61 @@ mkdir -p "$HOOK_DIR"
 
 cat > "$HOOK_FILE" << 'EOF'
 #!/bin/bash
-# ShellShield Pre-commit Hook
-# Prevents committing destructive scripts without review
+set -e
 
-if command -v bun >/dev/null 2>&1; then
-  RUNNER="bun run"
-else
-  echo "⚠️ Bun not found. Skipping ShellShield check."
+if [ "${SHELLSHIELD_SKIP:-}" = "1" ]; then
   exit 0
 fi
 
-# Locate ShellShield CLI
-# Assumes shellshield is installed in the project or globally
+if [ -x "$HOME/.bun/bin/bun" ]; then
+  BUN_BIN="$HOME/.bun/bin/bun"
+elif command -v bun >/dev/null 2>&1; then
+  BUN_BIN="bun"
+else
+  echo "ShellShield pre-commit: bun not found; skipping."
+  exit 0
+fi
+
 if [ -f "./src/index.ts" ]; then
   CLI="./src/index.ts"
-else
-  # Fallback to global or user home
+elif [ -f "$HOME/.shellshield/src/index.ts" ]; then
   CLI="$HOME/.shellshield/src/index.ts"
+else
+  echo "ShellShield pre-commit: shellshield not found; skipping."
+  exit 0
 fi
 
-if [ ! -f "$CLI" ]; then
-    echo "⚠️ ShellShield source not found. Skipping."
-    exit 0
-fi
+has_issues=0
 
-# Check staged files for dangerous patterns
-# This is a basic scan. For full protection, ShellShield CLI should support file scanning mode.
-# For now, we just ensure the hook infrastructure is there.
-# In future: $RUNNER $CLI --scan-staged
+while IFS= read -r line; do
+  case "$line" in
+    "+++"*|"@@"*|"diff "*|"index "*)
+      continue
+      ;;
+  esac
+
+  if [[ "$line" == "+"* ]]; then
+    candidate="${line#+}"
+
+    if [ -z "${candidate//[[:space:]]/}" ]; then
+      continue
+    fi
+
+    if [[ "$candidate" =~ (rm|shred|unlink|wipe|srm|dd|curl|wget|bash|sh|zsh|python|node|perl|ruby|php|mv|cp) ]]; then
+      if ! SHELLSHIELD_MODE=enforce "$BUN_BIN" run "$CLI" --check "$candidate" >/dev/null 2>&1; then
+        echo "ShellShield pre-commit blocked line:"
+        echo "  $candidate"
+        has_issues=1
+      fi
+    fi
+  fi
+done < <(git diff --cached -U0 --no-color)
+
+if [ "$has_issues" -ne 0 ]; then
+  echo "Commit blocked by ShellShield."
+  echo "Use SHELLSHIELD_SKIP=1 git commit to bypass."
+  exit 1
+fi
 
 exit 0
 EOF

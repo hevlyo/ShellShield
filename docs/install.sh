@@ -1,63 +1,88 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-# Cores
-RESET='\033[0m'
-BOLD='\033[1m'
-RED='\033[31m'
-GREEN='\033[32m'
-BLUE='\033[34m'
-CYAN='\033[36m'
+Color_Off=''
+Red=''
+Green=''
+Dim=''
+Bold_White=''
+Bold_Green=''
 
-echo -e "${BLUE}${BOLD}"
+if [[ -t 1 ]]; then
+  Color_Off='\033[0m'
+  Red='\033[0;31m'
+  Green='\033[0;32m'
+  Dim='\033[0;2m'
+  Bold_White='\033[1m'
+  Bold_Green='\033[1;32m'
+fi
+
+error() {
+  echo -e "${Red}error${Color_Off}:" "$@" >&2
+  exit 1
+}
+
+info() {
+  echo -e "${Dim}$@ ${Color_Off}"
+}
+
+info_bold() {
+  echo -e "${Bold_White}$@ ${Color_Off}"
+}
+
+success() {
+  echo -e "${Green}$@ ${Color_Off}"
+}
+
+echo -e "${Bold_White}"
 echo "🛡️  ShellShield Installer"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${RESET}"
+echo -e "${Color_Off}"
 
-# 1. Verificar Dependências
-echo -e "${CYAN}🔍 Checking requirements...${RESET}"
+export PATH="$HOME/.bun/bin:$PATH"
 
-if ! command -v git >/dev/null 2>&1; then
-  echo -e "${RED}❌ Git is required.${RESET}"
-  echo "Please install git and try again."
-  exit 1
-fi
+command -v git >/dev/null 2>&1 || error "git is required"
+command -v bun >/dev/null 2>&1 || error "bun is required (install: curl -fsSL https://bun.sh/install | bash)"
 
-if ! command -v bun >/dev/null 2>&1; then
-  echo -e "${RED}❌ Bun is required.${RESET}"
-  echo "Please install bun: curl -fsSL https://bun.sh/install | bash"
-  exit 1
-fi
+info "Checking requirements..."
+success "✅ Dependencies found."
 
-echo -e "${GREEN}✅ Dependencies found.${RESET}"
-
-# 2. Clone/Update Repo
 INSTALL_DIR="$HOME/.shellshield"
-echo -e "\n${CYAN}📦 Installing to ${INSTALL_DIR}...${RESET}"
+info "Installing to ${INSTALL_DIR}..."
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-  echo "Updating existing installation..."
+  info "Updating existing installation..."
   git -C "$INSTALL_DIR" fetch --quiet
   git -C "$INSTALL_DIR" reset --hard origin/main --quiet
 elif [ -d "$INSTALL_DIR" ]; then
-  echo "Directory $INSTALL_DIR exists but is not a git repo. Backing up..."
+  info "Directory exists but is not a git repo. Backing up..."
   mv "$INSTALL_DIR" "${INSTALL_DIR}.bak.$(date +%s)"
   git clone --depth 1 https://github.com/hevlyo/ShellShield.git "$INSTALL_DIR" --quiet
 else
   git clone --depth 1 https://github.com/hevlyo/ShellShield.git "$INSTALL_DIR" --quiet
 fi
 
-# Instalar dependências do projeto
-echo "Installing project dependencies..."
+info "Installing project dependencies (this may take a moment)..."
 cd "$INSTALL_DIR"
-bun install --production --silent
 
-echo -e "${GREEN}✅ Installed successfully.${RESET}"
+tmp_log=$(mktemp)
+set +e
+bun install --production --no-save --force 2>"$tmp_log"
+install_status=$?
+set -e
 
-# 3. Configurar Shell
-echo -e "\n${CYAN}🔌 Configuring shell integration...${RESET}"
+if [ $install_status -ne 0 ]; then
+  if grep -q "lockfile had changes" "$tmp_log"; then
+    error "bun lockfile is frozen. Update bun and retry (bun --version)."
+  fi
+  cat "$tmp_log" >&2
+  error "Failed to install dependencies"
+fi
 
-# Detecta o shell do usuário (não o do script de instalação)
+success "✅ Installed successfully."
+
+info "Configuring shell integration..."
+
 USER_SHELL=$(basename "$SHELL")
 PROFILE=""
 
@@ -66,7 +91,6 @@ case "$USER_SHELL" in
     PROFILE="$HOME/.zshrc"
     ;;
   bash)
-    # Preferência: .bashrc > .bash_profile
     if [ -f "$HOME/.bashrc" ]; then
       PROFILE="$HOME/.bashrc"
     else
@@ -74,8 +98,7 @@ case "$USER_SHELL" in
     fi
     ;;
   *)
-    echo -e "${RED}⚠️  Unsupported shell detected: $USER_SHELL${RESET}"
-    echo "Please manually add the hook to your shell configuration."
+    info "Unsupported shell detected: $USER_SHELL"
     PROFILE="$HOME/.profile"
     ;;
 esac
@@ -89,17 +112,17 @@ fi
 
 if [ -f "$PROFILE" ]; then
   if grep -q "ShellShield Hook" "$PROFILE"; then
-    echo -e "Hook already present in ${BOLD}$PROFILE${RESET}"
+    info "Hook already present in $PROFILE"
   else
     echo "$HOOK_SCRIPT" >> "$PROFILE"
-    echo -e "Hook added to ${BOLD}$PROFILE${RESET}"
+    info "Hook added to $PROFILE"
   fi
 else
-  echo -e "${RED}⚠️  Could not find shell profile ($PROFILE).${RESET}"
-  echo "Add this manually to your config:"
-  echo "$HOOK_SCRIPT"
+  info "Could not find shell profile ($PROFILE)."
+  info_bold "Add this manually to your config:"
+  info_bold "$HOOK_SCRIPT"
 fi
 
-echo -e "\n${GREEN}${BOLD}🎉 Done! Restart your shell to activate ShellShield.${RESET}"
-echo -e "Try running: ${BOLD}rm -rf /${RESET} (it will be blocked)"
-
+echo
+success "🎉 Done! Restart your shell to activate ShellShield."
+info_bold "Try running: rm -rf / (it will be blocked)"
