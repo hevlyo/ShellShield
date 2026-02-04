@@ -22,8 +22,8 @@ Foco: Estabilizar core, ganhar tração inicial, reduzir fricção de adoção.
 - [ ] Publicar primeira release tag (v0.1.0 beta) com notas de release no GitHub
 - [ ] Integração seamless com bash/zsh (hook init automático)
 - [x] Seção "Why Trust This?" no README ✅
-- [ ] GPG-signed install.sh
-- [ ] Badges: coverage, dependabot, stars goal (CI ✅)
+- [x] GPG-signed install.sh ✅
+- [ ] Badges: stars goal (CI ✅, coverage ✅, dependabot ✅)
 - [ ] Post inicial em X/Reddit/HN com demo GIFs
 
 ## Médio prazo (Q2-Q3 2026) — v1.0 a v2.0

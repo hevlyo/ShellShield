@@ -19,6 +19,7 @@ Stops `rm -rf /`, `curl | bash` traps, and homograph attacks — before they run
   <img src="https://img.shields.io/github/package-json/v/hevlyo/ShellShield" alt="Version">
   <img src="https://img.shields.io/badge/Built%20with-Bun-000?logo=bun" alt="Bun">
   <img src="https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot" alt="Dependabot">
+  <img src="https://img.shields.io/github/stars/hevlyo/ShellShield?color=gold" alt="Stars">
 </p>
 
 ---
