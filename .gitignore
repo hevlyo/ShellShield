@@ -31,3 +31,6 @@ Thumbs.db
 coverage/
 .opencode/
 tests/tmp-v2-tests/
+
+# Local-only analysis notes
+CRITICAL_ANALYSIS.md
