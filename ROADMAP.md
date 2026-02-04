@@ -13,7 +13,7 @@ Status: ✅ Feito | 🚧 Em progresso | ⏳ Planejado | ❓ Ideia
 - Adicionar GitHub Actions para `bun test` + badge de CI ✅
 - Configurar Dependabot para dependências Bun/TS ✅
 
-## Visão de curto prazo (Q1-Q2 2026) — v0.5 a v1.0
+## Visão de curto prazo — v0.5 a v1.0
 Foco: Estabilizar core, ganhar tração inicial, reduzir fricção de adoção.
 
 - [x] Hardening do installer + git hook funcional ✅
@@ -26,7 +26,7 @@ Foco: Estabilizar core, ganhar tração inicial, reduzir fricção de adoção.
 - [ ] Badges: stars goal (CI ✅, coverage ✅, dependabot ✅)
 - [ ] Post inicial em X/Reddit/HN com demo GIFs
 
-## Médio prazo (Q2-Q3 2026) — v1.0 a v2.0
+## Médio prazo — v1.0 a v2.0
 Foco: Features que diferenciam + expansão de shells/ambientes.
 
 - [ ] Suporte oficial a fish shell (#3)
@@ -39,7 +39,7 @@ Foco: Features que diferenciam + expansão de shells/ambientes.
 - [ ] Alertas desktop (notify-send, terminal bell custom)
 - [ ] Config presets: "dev", "prod", "paranoid"
 
-## Longo prazo (Q4 2026+) — v2.x+
+## Longo prazo — v2.x+
 Foco: Enterprise/team features + ecossistema.
 
 - [ ] Team dashboards para audit logs (centralizado, talvez via self-hosted server)
@@ -50,7 +50,7 @@ Foco: Enterprise/team features + ecossistema.
 - [ ] Integração com 1Password/GitGuardian para segredos em comandos
 
 ## Metas 2026
-- 100+ stars
+- 100 stars
 - 10+ contributors
 - Uso real em workflows AI (Cursor/Claude/Aider)
 - Integrações com pelo menos 2 tools populares
