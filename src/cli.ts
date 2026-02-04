@@ -52,6 +52,7 @@ _shellshield_accept_line() {
 zle -N accept-line _shellshield_accept_line
 autoload -Uz add-zsh-hook
 add-zsh-hook -d preexec _shellshield_preexec 2>/dev/null
+unfunction _shellshield_preexec 2>/dev/null
           `);
     } else {
       console.log(`
@@ -153,12 +154,26 @@ trap '_shellshield_bash_preexec' DEBUG
 
 
 function showBlockedMessage(reason: string, suggestion: string) {
+  const isTty = process.stderr.isTTY;
+  const red = isTty ? "\x1b[31m" : "";
+  const yellow = isTty ? "\x1b[33m" : "";
+  const cyan = isTty ? "\x1b[36m" : "";
+  const dim = isTty ? "\x1b[2m" : "";
+  const gray = isTty ? "\x1b[90m" : "";
+  const bold = isTty ? "\x1b[1m" : "";
+  const reset = isTty ? "\x1b[0m" : "";
+  const line = `${gray}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset}`;
+  const highlightedSuggestion = suggestion.replace(
+    /(\/[^\s"']+|[A-Za-z]:\\[^\s"']+)/g,
+    `${cyan}$1${reset}`
+  );
   console.error(
-    `🛡️  ShellShield BLOCKED: ${reason}\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `ACTION REQUIRED: ${suggestion}\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Bypass: SHELLSHIELD_SKIP=1 <command>\n` +
-      `ShellShield - Keeping your terminal safe.`
+    `\n${red}🛡️ ${reset}ShellShield ${red}BLOCKED${reset}: ${reason}\n` +
+      `${line}\n` +
+      `${bold}${yellow}ACTION REQUIRED:${reset} ${highlightedSuggestion}\n` +
+      `${line}\n` +
+      `${dim}Bypass: SHELLSHIELD_SKIP=1 <command>${reset}\n` +
+      `${dim}Hint:   set SHELLSHIELD_MODE=interactive for quick prompts${reset}\n` +
+      `${dim}ShellShield - Keeping your terminal safe.${reset}`
   );
 }
