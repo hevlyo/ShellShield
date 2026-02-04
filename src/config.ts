@@ -93,8 +93,8 @@ export function getConfiguration(): Config {
   const threshold =
     fileConfig.threshold || parseInt(process.env.SHELLSHIELD_THRESHOLD || "50", 10);
   const mode =
-    fileConfig.mode ||
     (process.env.SHELLSHIELD_MODE as "enforce" | "permissive" | "interactive") ||
+    fileConfig.mode ||
     "enforce";
   const customRules = fileConfig.customRules || [];
 

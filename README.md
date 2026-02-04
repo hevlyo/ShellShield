@@ -70,7 +70,7 @@ vhs demo.tape
 
 ## ⚡ Performance
 
-- **42,400 ops/sec** benchmark throughput
+- **22,700 ops/sec** benchmark throughput
 - **~27µs latency per command** (imperceptible to humans)
 - **96 tests** covering bypasses, edge cases, and advanced attacks
 
@@ -85,7 +85,7 @@ vhs demo.tape
 | Subshell recursion | ✅ | ❌ | ❌ |
 | Zero config needed | ✅ | ❌ | ❌ |
 | AI agent safe | ✅ | ❌ | ❌ |
-| Performance | **42k ops/sec** | N/A | ~10k ops/sec |
+| Performance | **22.7k ops/sec** | N/A | ~10k ops/sec |
 
 ---
 

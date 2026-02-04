@@ -47,7 +47,7 @@ async function runHook(
     stdin: "pipe",
     stderr: "pipe",
     stdout: "pipe",
-    env: { ...process.env, ...env },
+    env: { ...process.env, SHELLSHIELD_MODE: "enforce", ...env },
     cwd: PROJECT_ROOT
   });
 

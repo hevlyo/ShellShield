@@ -2,7 +2,8 @@ import { describe, test, expect } from "bun:test";
 import { spawn } from "bun";
 import { join } from "path";
 
-const HOOK_PATH = join(import.meta.dir, "..", "src", "index.ts");
+const PROJECT_ROOT = join(import.meta.dir, "..");
+const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
 
 async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) return "";
@@ -34,6 +35,8 @@ async function runHook(
     stdin: "pipe",
     stderr: "pipe",
     stdout: "pipe",
+    env: { ...process.env, SHELLSHIELD_MODE: "enforce" },
+    cwd: PROJECT_ROOT,
   });
 
   if (proc.stdin) {

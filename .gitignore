@@ -21,7 +21,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
-demo.tape
 
 # Environment
 .env
