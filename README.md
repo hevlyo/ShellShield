@@ -105,10 +105,14 @@ If private reporting is not possible, open a GitHub issue without exploit detail
 ## 🚀 Quick Start
 
 ```bash
-curl -fsSL https://hevlyo.github.io/ShellShield/install.sh | bash
+curl -fsSL https://hevlyo.github.io/ShellShield/install.sh -o /tmp/shellshield-install.sh
+SHELLSHIELD_INSTALL_SHA256="363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254" \
+  bash /tmp/shellshield-install.sh
 ```
 
 That’s it. ShellShield is now guarding your terminal.
+
+SHA256 (install.sh): `363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254`
 
 Try:
 ```bash

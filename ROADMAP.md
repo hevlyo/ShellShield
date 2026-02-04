@@ -1,26 +1,35 @@
 # ShellShield Roadmap
 
-**Última atualização:** Fevereiro 2026  
+**Última atualização:** 04 de fevereiro de 2026  
 **Visão geral:** Tornar o terminal seguro na era de IA coding assistants, com overhead mínimo e foco em vibecoders / power users.  
 Prioridade: Alta (H) / Média (M) / Baixa (L)  
 Status: ✅ Feito | 🚧 Em progresso | ⏳ Planejado | ❓ Ideia
 
+## Próximos passos
+- Publicar v0.1.0-beta com notas de release no GitHub
+- Adicionar checksum SHA256 + verificação no install.sh
+- Publicar no npm/Bun (`bun publish`)
+- Post no TabNews + divulgação inicial (linkando este ROADMAP)
+- Adicionar GitHub Actions para `bun test` + badge de CI
+- Configurar Dependabot para dependências Bun/TS
+
 ## Visão de curto prazo (Q1-Q2 2026) — v0.5 a v1.0
 Foco: Estabilizar core, ganhar tração inicial, reduzir fricção de adoção.
 
-- [x] Hardening do installer (checksums, harden phases) ✅
-- [x] Testes E2E estabilizados e demo assets atualizados ✅
-- [ ] Suporte automático a aliases/functions (in-memory snapshot ou on-demand probe) 🚧
-- [ ] Publicar primeira release tag (v0.1.0 beta) com changelog
+- [x] Hardening do installer + git hook funcional ✅
+- [x] Suporte opt-in a aliases/functions via snapshot in-memory (`contextPath` + `--snapshot`) ✅
+- [x] Testes E2E estabilizados e demo assets via vhs ✅
+- [ ] Publicar primeira release tag (v0.1.0 beta) com notas de release no GitHub
 - [ ] Integração seamless com bash/zsh (hook init automático)
-- [ ] Seção "Why Trust This?" no README + GPG-signed install.sh
+- [x] Seção "Why Trust This?" no README ✅
+- [ ] GPG-signed install.sh
 - [ ] Badges: CI, coverage, dependabot, stars goal
 - [ ] Post inicial em X/Reddit/HN com demo GIFs
 
 ## Médio prazo (Q2-Q3 2026) — v1.0 a v2.0
 Foco: Features que diferenciam + expansão de shells/ambientes.
 
-- [ ] Suporte oficial a fish shell
+- [ ] Suporte oficial a fish shell (#3)
 - [ ] Modo Windows (via WSL ou native se viável)
 - [ ] Public docs site (Docusaurus ou MkDocs) com rule reference completa
 - [ ] Prebuilt binaries (via GitHub Releases: Linux/macOS/arm64)
@@ -39,6 +48,12 @@ Foco: Enterprise/team features + ecossistema.
 - [ ] Suporte a mais interpretadores (ruby -e, perl -e, etc.)
 - [ ] Modo "learning" (aprende allowlists do usuário ao longo do tempo)
 - [ ] Integração com 1Password/GitGuardian para segredos em comandos
+
+## Metas 2026
+- 100+ stars
+- 10+ contributors
+- Uso real em workflows AI (Cursor/Claude/Aider)
+- Integrações com pelo menos 2 tools populares
 
 ## Como contribuir / Prioridades atuais
 - Veja issues com label `help wanted` ou `good first issue`

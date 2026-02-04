@@ -39,6 +39,33 @@ echo "🛡️  ShellShield Installer"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${Color_Off}"
 
+verify_checksum() {
+  local script_path="$1"
+  local expected="${SHELLSHIELD_INSTALL_SHA256:-}"
+  if [ -z "$expected" ]; then
+    error "Missing SHELLSHIELD_INSTALL_SHA256. Get the checksum from the README and retry."
+  fi
+  if [ -z "$script_path" ] || [ ! -f "$script_path" ]; then
+    error "Installer must be run from a file to verify checksum. Download it first."
+  fi
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    echo "${expected}  ${script_path}" | sha256sum -c - >/dev/null 2>&1 \
+      || error "Installer checksum verification failed."
+    return 0
+  fi
+
+  if command -v shasum >/dev/null 2>&1; then
+    echo "${expected}  ${script_path}" | shasum -a 256 -c - >/dev/null 2>&1 \
+      || error "Installer checksum verification failed."
+    return 0
+  fi
+
+  error "sha256sum or shasum is required to verify the installer."
+}
+
+verify_checksum "$0"
+
 export PATH="$HOME/.bun/bin:$PATH"
 
 command -v git >/dev/null 2>&1 || error "git is required"
