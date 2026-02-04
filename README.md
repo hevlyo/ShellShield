@@ -127,6 +127,13 @@ That’s it. ShellShield is now guarding your terminal.
 
 SHA256 (install.sh): `363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254`
 
+GPG verification (optional):
+```bash
+curl -fsSL https://hevlyo.github.io/ShellShield/install.sh.asc -o /tmp/shellshield-install.sh.asc
+gpg --keyserver keys.openpgp.org --recv-keys 744857708F52A3F4885EDA5CF38DA114834A9FA0
+gpg --verify /tmp/shellshield-install.sh.asc /tmp/shellshield-install.sh
+```
+
 Try:
 ```bash
 rm -rf /tmp/test
@@ -196,6 +203,12 @@ ShellShield works out of the box. Create `.shellshield.json` to customize:
 - `enforce` (default): blocks dangerous commands
 - `permissive`: logs warnings but allows execution
 - `interactive`: prompts for confirmation
+
+| Mode | What it does | When to use |
+|---|---|---|
+| `enforce` | Blocks dangerous commands | Daily use |
+| `permissive` | Logs only | First days / CI |
+| `interactive` | Prompts for confirmation | When AI-generated commands are uncertain |
 
 ### Environment Variables
 - `SHELLSHIELD_THRESHOLD`: max files per delete (default: 50)
