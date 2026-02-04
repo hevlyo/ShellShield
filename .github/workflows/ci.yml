@@ -22,11 +22,15 @@ jobs:
         run: bun test --max-concurrency 1 --timeout 15000 --coverage --coverage-reporter=lcov
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./coverage/lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
       - name: Skip Codecov (no token)
-        if: ${{ secrets.CODECOV_TOKEN == '' }}
+        if: ${{ env.CODECOV_TOKEN == '' }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         run: echo "CODECOV_TOKEN not set; skipping upload."
