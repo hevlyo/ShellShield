@@ -7,11 +7,11 @@ Status: ✅ Feito | 🚧 Em progresso | ⏳ Planejado | ❓ Ideia
 
 ## Próximos passos
 - Publicar v0.1.0-beta com notas de release no GitHub
-- Adicionar checksum SHA256 + verificação no install.sh
+- Adicionar checksum SHA256 + verificação no install.sh ✅
 - Publicar no npm/Bun (`bun publish`)
 - Post no TabNews + divulgação inicial (linkando este ROADMAP)
-- Adicionar GitHub Actions para `bun test` + badge de CI
-- Configurar Dependabot para dependências Bun/TS
+- Adicionar GitHub Actions para `bun test` + badge de CI ✅
+- Configurar Dependabot para dependências Bun/TS ✅
 
 ## Visão de curto prazo (Q1-Q2 2026) — v0.5 a v1.0
 Foco: Estabilizar core, ganhar tração inicial, reduzir fricção de adoção.
@@ -23,7 +23,7 @@ Foco: Estabilizar core, ganhar tração inicial, reduzir fricção de adoção.
 - [ ] Integração seamless com bash/zsh (hook init automático)
 - [x] Seção "Why Trust This?" no README ✅
 - [ ] GPG-signed install.sh
-- [ ] Badges: CI, coverage, dependabot, stars goal
+- [ ] Badges: coverage, dependabot, stars goal (CI ✅)
 - [ ] Post inicial em X/Reddit/HN com demo GIFs
 
 ## Médio prazo (Q2-Q3 2026) — v1.0 a v2.0
