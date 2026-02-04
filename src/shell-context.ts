@@ -72,32 +72,48 @@ export function parseTypeOutput(output: string): ShellContextEntry {
   const first = out.split("\n")[0] ?? "";
 
   // bash: "ls is aliased to 'ls --color=auto'"
-  const aliasMatch = first.match(/\bis aliased to\s+(['`\"])([\s\S]*?)\1/);
-  if (aliasMatch) {
-    return { kind: "alias", output: out, expansion: aliasMatch[2] };
+  const aliasedTo = first.match(/\bis aliased to\s+(['`\"])([\s\S]*?)\1/);
+  if (aliasedTo) {
+    return { kind: "alias", output: out, expansion: aliasedTo[2] };
   }
 
-  // bash: "foo is a function" + body
-  if (first.includes(" is a function")) {
+  // zsh: "ls is an alias for ls -G" (sometimes quoted)
+  const aliasForQuoted = first.match(/\bis an alias for\s+(['`\"])([\s\S]*?)\1/);
+  if (aliasForQuoted) {
+    return { kind: "alias", output: out, expansion: aliasForQuoted[2] };
+  }
+  const aliasFor = first.match(/\bis an alias for\s+(.+)$/);
+  if (aliasFor) {
+    return { kind: "alias", output: out, expansion: aliasFor[1].trim() };
+  }
+
+  // bash/zsh: function output + body
+  if (first.includes(" is a function") || first.includes(" is a shell function")) {
     return { kind: "function", output: out };
   }
 
-  if (first.includes(" is a shell builtin")) {
+  // builtins
+  if (first.includes(" is a shell builtin") || first.includes(" is a builtin")) {
     return { kind: "builtin", output: out };
   }
 
-  if (first.includes(" is a shell keyword")) {
+  // keywords
+  if (first.includes(" is a shell keyword") || first.includes(" is a reserved word")) {
     return { kind: "keyword", output: out };
   }
 
-  // bash: "rm is /usr/bin/rm"
+  // file paths
   if (/\bis\s+\//.test(first)) {
+    return { kind: "file", output: out };
+  }
+
+  // hashed path (zsh)
+  if (/\bis hashed\s*\(\//.test(first)) {
     return { kind: "file", output: out };
   }
 
   return { kind: "unknown", output: out };
 }
-
 export function getShellContextEntry(cmd: string): ShellContextEntry | null {
   const p = getShellContextSnapshotPath();
   if (!p) return null;
