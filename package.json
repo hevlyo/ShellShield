@@ -1,5 +1,5 @@
 {
-  "name": "@opencode/shellshield",
+  "name": "@shellshield/shellshield",
   "version": "1.1.0",
   "description": "The ultimate safety shield for your terminal. Prevents accidental file destruction.",
   "type": "module",
@@ -15,6 +15,9 @@
   },
   "keywords": ["opencode", "hook", "safety", "trash"],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/shell-quote": "^1.7.5"

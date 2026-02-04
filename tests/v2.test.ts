@@ -8,6 +8,7 @@ import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "../src/constants";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
+const BUN_PATH = process.execPath;
 const TEST_DIR = join(import.meta.dir, "tmp-v2-tests");
 
 const TEST_CONTEXT = {
@@ -56,7 +57,7 @@ async function runHook(
   const input = JSON.stringify({ tool_input: { command } });
 
   const proc = spawn({
-    cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
+    cmd: [BUN_PATH, "run", HOOK_PATH],
     stdin: "pipe",
     stderr: "pipe",
     stdout: "ignore",

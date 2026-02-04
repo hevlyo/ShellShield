@@ -1,9 +1,8 @@
 # 🛡️ ShellShield
 
-<p align="center">
-  <strong>Stop accidental <code>rm -rf /</code> before it happens.</strong><br>
-  The AI‑era security layer your terminal desperately needs.
-</p>
+Real-time terminal guard for the AI era.  
+Stops `rm -rf /`, `curl | bash` traps, and homograph attacks — before they run.  
+~32.8 µs latency. Zero config. Local-only.
 
 <p align="center">
   <a href="#-quick-start">Get Started</a> •
@@ -14,11 +13,13 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Bun-1.0+-black?style=for-the-badge&logo=bun" alt="Bun">
-  <img src="https://img.shields.io/badge/Security-Hardened-red?style=for-the-badge" alt="Security Hardened">
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License MIT">
-  <img src="https://github.com/hevlyo/ShellShield/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
-  <img src="https://img.shields.io/badge/Dependabot-enabled-brightgreen?style=for-the-badge&logo=dependabot" alt="Dependabot">
+  <img src="https://github.com/hevlyo/ShellShield/actions/workflows/ci.yml/badge.svg?branch=main" alt="Tests">
+  <img src="https://codecov.io/gh/hevlyo/ShellShield/branch/main/graph/badge.svg" alt="Coverage">
+  <img src="https://img.shields.io/badge/License-MIT-blue" alt="License MIT">
+  <img src="https://img.shields.io/github/package-json/v/hevlyo/ShellShield" alt="Version">
+  <img src="https://img.shields.io/badge/Built%20with-Bun-000?logo=bun" alt="Bun">
+  <img src="https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot" alt="Dependabot">
+  <img src="https://img.shields.io/github/stars/hevlyo/ShellShield?color=gold" alt="Stars">
 </p>
 
 ---
@@ -67,9 +68,9 @@ ShellShield is a high‑performance, intelligent shell hook that tokenizes every
 
 ## ⚡ Performance
 
-- **28,884 ops/sec** benchmark throughput
-- **~34.6µs latency per command** (imperceptible to humans)
-- **96 tests** covering bypasses, edge cases, and advanced attacks
+- **30,452 ops/sec** benchmark throughput
+- **~32.8µs latency per command** (imperceptible to humans)
+- **117 tests** covering bypasses, edge cases, and advanced attacks
 
 ---
 
@@ -106,8 +107,20 @@ If private reporting is not possible, open a GitHub issue without exploit detail
 
 ## 🚀 Quick Start
 
+### Secure Install (recommended)
+
+1. Download the installer
 ```bash
 curl -fsSL https://hevlyo.github.io/ShellShield/install.sh -o /tmp/shellshield-install.sh
+```
+
+2. Verify integrity
+```bash
+echo "363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254  /tmp/shellshield-install.sh" | sha256sum --check
+```
+
+3. Run only if OK
+```bash
 SHELLSHIELD_INSTALL_SHA256="363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254" \
   bash /tmp/shellshield-install.sh
 ```
@@ -116,9 +129,36 @@ That’s it. ShellShield is now guarding your terminal.
 
 SHA256 (install.sh): `363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254`
 
+GPG verification (optional):
+```bash
+curl -fsSL https://hevlyo.github.io/ShellShield/install.sh.asc -o /tmp/shellshield-install.sh.asc
+gpg --keyserver keys.openpgp.org --recv-keys 744857708F52A3F4885EDA5CF38DA114834A9FA0
+gpg --verify /tmp/shellshield-install.sh.asc /tmp/shellshield-install.sh
+```
+
 Try:
 ```bash
 rm -rf /tmp/test
+```
+
+### Manual Install (no curl)
+
+```bash
+git clone https://github.com/hevlyo/ShellShield
+cd ShellShield
+bun install
+bun run src/index.ts --init
+```
+
+### Install via npm/bunx
+
+```bash
+bunx @shellshield/shellshield --init
+```
+
+```bash
+npm i -g @shellshield/shellshield
+shellshield --init
 ```
 
 ### Uninstall
@@ -144,6 +184,18 @@ bun run src/index.ts --init
 
 ---
 
+## 👥 Who Is Using It?
+
+Early adopters are welcome. Want your team listed here? Open a PR or issue with your logo/name.
+
+---
+
+## 🧭 Roadmap
+
+See `ROADMAP.md` for public priorities and upcoming work.
+
+---
+
 ## ⚙️ Configuration
 
 ShellShield works out of the box. Create `.shellshield.json` to customize:
@@ -164,6 +216,12 @@ ShellShield works out of the box. Create `.shellshield.json` to customize:
 - `enforce` (default): blocks dangerous commands
 - `permissive`: logs warnings but allows execution
 - `interactive`: prompts for confirmation
+
+| Mode | What it does | When to use |
+|---|---|---|
+| `enforce` | Blocks dangerous commands | Daily use |
+| `permissive` | Logs only | First days / CI |
+| `interactive` | Prompts for confirmation | When AI-generated commands are uncertain |
 
 ### Environment Variables
 - `SHELLSHIELD_THRESHOLD`: max files per delete (default: 50)

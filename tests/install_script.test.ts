@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "path";
+import { readFileSync } from "fs";
+import { createHash } from "crypto";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const INSTALLER = join(PROJECT_ROOT, "docs", "install.sh");
+
+function installerSha256(): string {
+  const content = readFileSync(INSTALLER);
+  return createHash("sha256").update(content).digest("hex");
+}
 
 describe("Installer script", () => {
   test("install.sh is valid bash", () => {
@@ -19,6 +26,7 @@ describe("Installer script", () => {
       cwd: PROJECT_ROOT,
       env: {
         ...process.env,
+        SHELLSHIELD_INSTALL_SHA256: installerSha256(),
         PATH: "/usr/bin:/bin",
         HOME: "/tmp",
       },

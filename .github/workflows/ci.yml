@@ -19,5 +19,13 @@ jobs:
       - name: Install dependencies
         run: bun install --production --no-save --force
       - name: Run tests
-        run: bun test --max-concurrency 1 --timeout 15000
-
+        run: bun test --max-concurrency 1 --timeout 15000 --coverage --coverage-reporter=lcov
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true

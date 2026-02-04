@@ -4,6 +4,7 @@ import { join, resolve } from "path";
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "index.ts");
+const BUN_PATH = process.execPath;
 
 async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) return "";
@@ -25,7 +26,7 @@ async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<s
 
 async function runCheck(command: string, env: Record<string, string>) {
   const proc = spawn({
-    cmd: ["/home/hevlyo/.bun/bin/bun", "run", CLI_PATH, "--check", command],
+    cmd: [BUN_PATH, "run", CLI_PATH, "--check", command],
     stdin: "ignore",
     stderr: "pipe",
     stdout: "ignore",

@@ -1,9 +1,27 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeAll } from "bun:test";
 import { spawn } from "bun";
 import { join } from "path";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "index.ts");
+const BUN_PATH = process.execPath;
+let canUseScript = false;
+
+beforeAll(async () => {
+  try {
+    const probe = spawn({
+      cmd: ["script", "-q", "-c", "echo ok", "/dev/null"],
+      stdin: "ignore",
+      stderr: "ignore",
+      stdout: "ignore",
+      cwd: PROJECT_ROOT,
+    });
+    const exitCode = await probe.exited;
+    canUseScript = exitCode === 0;
+  } catch {
+    canUseScript = false;
+  }
+});
 
 async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) return "";
@@ -25,7 +43,7 @@ async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<s
 
 async function runCheck(command: string, env: Record<string, string> = {}, stdin?: string) {
   const proc = spawn({
-    cmd: ["/home/hevlyo/.bun/bin/bun", "run", CLI_PATH, "--check", command],
+    cmd: [BUN_PATH, "run", CLI_PATH, "--check", command],
     stdin: stdin ? "pipe" : "ignore",
     stderr: "pipe",
     stdout: "ignore",
@@ -42,7 +60,7 @@ async function runCheck(command: string, env: Record<string, string> = {}, stdin
 }
 
 async function runCheckTty(command: string, env: Record<string, string>, stdin: string) {
-  const fullCmd = `/home/hevlyo/.bun/bin/bun run "${CLI_PATH}" --check "${command.replace(/"/g, '\\"')}"`;
+  const fullCmd = `${BUN_PATH} run "${CLI_PATH}" --check "${command.replace(/"/g, '\\"')}"`;
   const proc = spawn({
     cmd: ["script", "-q", "-c", fullCmd, "/dev/null"],
     stdin: "pipe",
@@ -73,6 +91,7 @@ describe("CLI output snapshots", () => {
   });
 
   test("interactive approve/cancel messaging", async () => {
+    if (!canUseScript) return;
     const denied = await runCheckTty("rm -rf /tmp/test", { SHELLSHIELD_MODE: "interactive" }, "n\n");
     expect(denied.output).toContain("Cancelled by user");
     expect(denied.output).toMatchSnapshot();
