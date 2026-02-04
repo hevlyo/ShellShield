@@ -8,6 +8,7 @@ import { BlockResult } from "../../types";
  */
 export class RawThreatRule implements SecurityRule {
   readonly name = "RawThreatRule";
+  readonly phase = "pre" as const;
 
   private readonly patterns: Array<{ pattern: RegExp; reason: string; suggestion: string }> = [
     {

@@ -1,0 +1,50 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`CLI output snapshots blocked message (enforce) 1`] = `
+"
+🛡️ ShellShield BLOCKED: Destructive command 'rm' detected
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTION REQUIRED: trash /tmp/test
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Bypass: SHELLSHIELD_SKIP=1 <command>
+Hint:   set SHELLSHIELD_MODE=interactive for quick prompts
+ShellShield - Keeping your terminal safe.
+"
+`;
+
+exports[`CLI output snapshots permissive warning 1`] = `
+"⚠️  ShellShield WARNING: Command 'rm -rf /tmp/test' would be blocked in enforce mode.
+Reason: Destructive command 'rm' detected
+Suggestion: trash /tmp/test
+"
+`;
+
+exports[`CLI output snapshots interactive approve/cancel messaging 1`] = `
+"n
+\x1B[1G\x1B[0J
+⚠️  ShellShield ALERT: Destructive command 'rm' detected
+   Command: rm -rf /tmp/test
+   Are you sure you want to execute this? [y/N] \x1B[49Gn
+
+\x1B[0m\x1B[31m\x1B[90mCancelled by user.\x1B[0m\x1B[0m
+\x1B[0m\x1B[31m
+\x1B[31m🛡️ \x1B[0mShellShield \x1B[31mBLOCKED\x1B[0m: Destructive command 'rm' detected
+\x1B[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
+\x1B[1m\x1B[33mACTION REQUIRED:\x1B[0m trash \x1B[36m/tmp/test\x1B[0m
+\x1B[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
+\x1B[2mBypass: SHELLSHIELD_SKIP=1 <command>\x1B[0m
+\x1B[2mHint:   set SHELLSHIELD_MODE=interactive for quick prompts\x1B[0m
+\x1B[2mShellShield - Keeping your terminal safe.\x1B[0m\x1B[0m
+"
+`;
+
+exports[`CLI output snapshots interactive approve/cancel messaging 2`] = `
+"y
+\x1B[1G\x1B[0J
+⚠️  ShellShield ALERT: Destructive command 'rm' detected
+   Command: rm -rf /tmp/test
+   Are you sure you want to execute this? [y/N] \x1B[49Gy
+
+\x1B[0m\x1B[31m\x1B[32mApproved. Command will execute.\x1B[0m\x1B[0m
+"
+`;

@@ -124,6 +124,7 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
       test("supports --check flag for direct command validation", async () => {
           const proc = spawnSync({
               cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH, "--check", "rm -rf /"],
+              env: { ...process.env, SHELLSHIELD_MODE: "enforce" },
               cwd: PROJECT_ROOT
           });
           expect(proc.exitCode).toBe(2);
@@ -144,6 +145,9 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
           const proc = spawn({
               cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
               stdin: "pipe",
+              stderr: "pipe",
+              stdout: "ignore",
+              env: { ...process.env, SHELLSHIELD_MODE: "enforce" },
               cwd: PROJECT_ROOT
           });
           proc.stdin.write("rm -rf /");

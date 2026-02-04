@@ -17,11 +17,58 @@ export function hasHomograph(str: string): { detected: boolean; char?: string } 
 
     if (!host.includes(".")) continue;
 
+    const scripts = new Set<string>();
+    let suspiciousChar: string | undefined;
+    let hasNonAsciiLetter = false;
+
     for (const char of host) {
-      const code = char.charCodeAt(0);
       const isHidden = /[\u200B-\u200D\uFEFF]/.test(char);
-      if (code > 127 && !isHidden) {
-        return { detected: true, char };
+      if (isHidden) continue;
+
+      const code = char.charCodeAt(0);
+      const lower = char.toLowerCase();
+
+      // Only consider letters for script mixing heuristics
+      const isAsciiLetter = lower >= "a" && lower <= "z";
+      if (isAsciiLetter) {
+        scripts.add("latin");
+        continue;
+      }
+
+      // Cyrillic
+      if (code >= 0x0400 && code <= 0x04ff) {
+        scripts.add("cyrillic");
+        hasNonAsciiLetter = true;
+        suspiciousChar = suspiciousChar ?? char;
+        continue;
+      }
+
+      // Greek
+      if (code >= 0x0370 && code <= 0x03ff) {
+        scripts.add("greek");
+        hasNonAsciiLetter = true;
+        suspiciousChar = suspiciousChar ?? char;
+        continue;
+      }
+
+      // Any other non-ASCII letter-like character
+      if (code > 127) {
+        // Treat as non-ascii; mark script as other for mixing detection
+        scripts.add("other");
+        hasNonAsciiLetter = true;
+        suspiciousChar = suspiciousChar ?? char;
+      }
+    }
+
+    // IDN-safe heuristic:
+    // - Allow pure non-Latin hostnames (single non-latin script) to reduce false positives.
+    // - Block mixed scripts or latin+non-ascii mixes (classic homograph).
+    if (hasNonAsciiLetter) {
+      if (scripts.has("latin") && scripts.size > 1) {
+        return { detected: true, char: suspiciousChar };
+      }
+      if (scripts.size > 1) {
+        return { detected: true, char: suspiciousChar };
       }
     }
   }

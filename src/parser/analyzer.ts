@@ -41,7 +41,19 @@ export function checkDestructive(
   depth = 0,
   context?: Config
 ): BlockResult {
-  if (depth > 5) return { blocked: false };
+  const maxDepth = Math.max(
+    0,
+    Number.parseInt(process.env.SHELLSHIELD_MAX_SUBSHELL_DEPTH || "5", 10) || 5
+  );
+  if (depth > maxDepth) {
+    return {
+      blocked: true,
+      reason: "SUBSHELL DEPTH LIMIT EXCEEDED",
+      suggestion:
+        `Command contains nested subshells beyond the analysis limit (${maxDepth}). ` +
+        "Simplify the command, or inspect it manually before running.",
+    };
+  }
 
   const config = context ?? getConfiguration();
 
@@ -55,10 +67,9 @@ export function checkDestructive(
   };
 
   for (const rule of rules) {
-    if (rule instanceof HomographRule || rule instanceof TerminalInjectionRule || rule instanceof RawThreatRule || rule instanceof CustomRule) {
-       const result = rule.check(stringContext);
-       if (result?.blocked) return result;
-    }
+    if (rule.phase !== "pre") continue;
+    const result = rule.check(stringContext);
+    if (result?.blocked) return result;
   }
 
   // 2. Parse Command
@@ -84,10 +95,9 @@ export function checkDestructive(
   };
 
   for (const rule of rules) {
-    if (rule instanceof CoreAstRule) {
-        const result = rule.check(fullContext);
-        if (result?.blocked) return result;
-    }
+    if (rule.phase !== "post") continue;
+    const result = rule.check(fullContext);
+    if (result?.blocked) return result;
   }
 
   return { blocked: false };

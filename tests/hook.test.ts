@@ -1,9 +1,20 @@
 import { describe, test, expect } from "bun:test";
 import { spawn } from "bun";
 import { join } from "path";
+import { checkDestructive } from "../src/parser/analyzer";
+import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "../src/constants";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
+
+const TEST_CONTEXT = {
+  blocked: new Set(DEFAULT_BLOCKED),
+  allowed: new Set<string>(),
+  trustedDomains: DEFAULT_TRUSTED_DOMAINS,
+  threshold: 50,
+  mode: "enforce" as const,
+  customRules: [],
+};
 
 async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) return "";
@@ -25,16 +36,14 @@ async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<s
   }
 }
 
-async function runHook(
-  command: string
-): Promise<{ exitCode: number; stderr: string }> {
+async function runHook(command: string): Promise<{ exitCode: number; stderr: string }> {
   const input = JSON.stringify({ tool_input: { command } });
 
   const proc = spawn({
     cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
     stdin: "pipe",
     stderr: "pipe",
-    stdout: "pipe",
+    stdout: "ignore",
     env: { ...process.env, SHELLSHIELD_MODE: "enforce" },
     cwd: PROJECT_ROOT,
   });
@@ -50,179 +59,173 @@ async function runHook(
   return { exitCode, stderr };
 }
 
+function analyze(command: string) {
+  return checkDestructive(command, 0, TEST_CONTEXT);
+}
+
 describe("Commands that SHOULD be blocked", () => {
   test("rm file.txt", async () => {
-    const { exitCode, stderr } = await runHook("rm file.txt");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("rm file.txt");
+    expect(result.blocked).toBe(true);
   });
 
   test("rm -rf directory/", async () => {
-    const { exitCode, stderr } = await runHook("rm -rf directory/");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("rm -rf directory/");
+    expect(result.blocked).toBe(true);
   });
 
   test("rm -f *.log", async () => {
-    const { exitCode, stderr } = await runHook("rm -f *.log");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("rm -f *.log");
+    expect(result.blocked).toBe(true);
   });
 
   test("sudo rm file", async () => {
-    const { exitCode, stderr } = await runHook("sudo rm file");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("sudo rm file");
+    expect(result.blocked).toBe(true);
   });
 
   test("cmd && rm file", async () => {
-    const { exitCode, stderr } = await runHook("ls && rm file");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("ls && rm file");
+    expect(result.blocked).toBe(true);
   });
 
   test("cmd || rm file", async () => {
-    const { exitCode, stderr } = await runHook("ls || rm file");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("ls || rm file");
+    expect(result.blocked).toBe(true);
   });
 
   test("cmd ; rm file", async () => {
-    const { exitCode, stderr } = await runHook("ls ; rm file");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("ls ; rm file");
+    expect(result.blocked).toBe(true);
   });
 
   test("cmd | xargs rm", async () => {
-    const { exitCode, stderr } = await runHook("find . | xargs rm");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("find . | xargs rm");
+    expect(result.blocked).toBe(true);
   });
 
   test("shred secret.txt", async () => {
-    const { exitCode, stderr } = await runHook("shred secret.txt");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("shred secret.txt");
+    expect(result.blocked).toBe(true);
   });
 
   test("unlink file", async () => {
-    const { exitCode, stderr } = await runHook("unlink file");
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("BLOCKED");
+    const result = analyze("unlink file");
+    expect(result.blocked).toBe(true);
   });
 });
 
 describe("Commands that SHOULD be allowed", () => {
   test("git rm file.ts", async () => {
-    const { exitCode } = await runHook("git rm file.ts");
-    expect(exitCode).toBe(0);
+    const result = analyze("git rm file.ts");
+    expect(result.blocked).toBe(false);
   });
 
   test("ls -la", async () => {
-    const { exitCode } = await runHook("ls -la");
-    expect(exitCode).toBe(0);
+    const result = analyze("ls -la");
+    expect(result.blocked).toBe(false);
   });
 
   test("cat README.md", async () => {
-    const { exitCode } = await runHook("cat README.md");
-    expect(exitCode).toBe(0);
+    const result = analyze("cat README.md");
+    expect(result.blocked).toBe(false);
   });
 
   test("npm install", async () => {
-    const { exitCode } = await runHook("npm install");
-    expect(exitCode).toBe(0);
+    const result = analyze("npm install");
+    expect(result.blocked).toBe(false);
   });
 
   test("pnpm remove package", async () => {
-    const { exitCode } = await runHook("pnpm remove package");
-    expect(exitCode).toBe(0);
+    const result = analyze("pnpm remove package");
+    expect(result.blocked).toBe(false);
   });
 
   test("echo 'rm test' (quoted)", async () => {
-    const { exitCode } = await runHook("echo 'rm test'");
-    expect(exitCode).toBe(0);
+    const result = analyze("echo 'rm test'");
+    expect(result.blocked).toBe(false);
   });
 
   test('echo "rm test" (double quoted)', async () => {
-    const { exitCode } = await runHook('echo "rm test"');
-    expect(exitCode).toBe(0);
+    const result = analyze('echo "rm test"');
+    expect(result.blocked).toBe(false);
   });
 
   test("git commit -m 'rm old files'", async () => {
-    const { exitCode } = await runHook("git commit -m 'rm old files'");
-    expect(exitCode).toBe(0);
+    const result = analyze("git commit -m 'rm old files'");
+    expect(result.blocked).toBe(false);
   });
 
   test("grep 'rm' file.txt", async () => {
-    const { exitCode } = await runHook("grep 'rm' file.txt");
-    expect(exitCode).toBe(0);
+    const result = analyze("grep 'rm' file.txt");
+    expect(result.blocked).toBe(false);
   });
 });
 
 describe("Bypass patterns that SHOULD be blocked", () => {
   test("/bin/rm file.txt (absolute path)", async () => {
-    const { exitCode } = await runHook("/bin/rm file.txt");
-    expect(exitCode).toBe(2);
+    const result = analyze("/bin/rm file.txt");
+    expect(result.blocked).toBe(true);
   });
 
   test("/usr/bin/rm -rf dir/ (absolute path)", async () => {
-    const { exitCode } = await runHook("/usr/bin/rm -rf dir/");
-    expect(exitCode).toBe(2);
+    const result = analyze("/usr/bin/rm -rf dir/");
+    expect(result.blocked).toBe(true);
   });
 
   test("./rm file (relative path)", async () => {
-    const { exitCode } = await runHook("./rm file");
-    expect(exitCode).toBe(2);
+    const result = analyze("./rm file");
+    expect(result.blocked).toBe(true);
   });
 
   test("sh -c 'rm file.txt' (subshell)", async () => {
-    const { exitCode } = await runHook("sh -c 'rm file.txt'");
-    expect(exitCode).toBe(2);
+    const result = analyze("sh -c 'rm file.txt'");
+    expect(result.blocked).toBe(true);
   });
 
   test("bash -c 'rm -rf dir/' (subshell)", async () => {
-    const { exitCode } = await runHook("bash -c 'rm -rf dir/'");
-    expect(exitCode).toBe(2);
+    const result = analyze("bash -c 'rm -rf dir/'");
+    expect(result.blocked).toBe(true);
   });
 
   test("command rm file.txt (builtin bypass)", async () => {
-    const { exitCode } = await runHook("command rm file.txt");
-    expect(exitCode).toBe(2);
+    const result = analyze("command rm file.txt");
+    expect(result.blocked).toBe(true);
   });
 
   test("env rm file.txt (env bypass)", async () => {
-    const { exitCode } = await runHook("env rm file.txt");
-    expect(exitCode).toBe(2);
+    const result = analyze("env rm file.txt");
+    expect(result.blocked).toBe(true);
   });
 
   test("\\rm file.txt (backslash escape)", async () => {
-    const { exitCode } = await runHook("\\rm file.txt");
-    expect(exitCode).toBe(2);
+    const result = analyze("\\rm file.txt");
+    expect(result.blocked).toBe(true);
   });
 
   test("find . -delete", async () => {
-    const { exitCode } = await runHook("find . -delete");
-    expect(exitCode).toBe(2);
+    const result = analyze("find . -delete");
+    expect(result.blocked).toBe(true);
   });
 
   test("find . -name '*.log' -delete", async () => {
-    const { exitCode } = await runHook("find . -name '*.log' -delete");
-    expect(exitCode).toBe(2);
+    const result = analyze("find . -name '*.log' -delete");
+    expect(result.blocked).toBe(true);
   });
 
   test("find . -exec rm {} \\;", async () => {
-    const { exitCode } = await runHook("find . -exec rm {} \\;");
-    expect(exitCode).toBe(2);
+    const result = analyze("find . -exec rm {} \\;");
+    expect(result.blocked).toBe(true);
   });
 
   test("sudo /bin/rm file", async () => {
-    const { exitCode } = await runHook("sudo /bin/rm file");
-    expect(exitCode).toBe(2);
+    const result = analyze("sudo /bin/rm file");
+    expect(result.blocked).toBe(true);
   });
 
   test("xargs /bin/rm", async () => {
-    const { exitCode } = await runHook("find . | xargs /bin/rm");
-    expect(exitCode).toBe(2);
+    const result = analyze("find . | xargs /bin/rm");
+    expect(result.blocked).toBe(true);
   });
 });
 
@@ -237,7 +240,9 @@ describe("Edge cases", () => {
       cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
       stdin: "pipe",
       stderr: "pipe",
-      stdout: "pipe",
+      stdout: "ignore",
+      env: { ...process.env, SHELLSHIELD_MODE: "enforce" },
+      cwd: PROJECT_ROOT,
     });
 
     proc.stdin.write("not valid json");

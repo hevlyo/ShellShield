@@ -7,6 +7,7 @@ import { BlockResult } from "../../types";
  */
 export class CustomRule implements SecurityRule {
   readonly name = "CustomRule";
+  readonly phase = "pre" as const;
 
   check(context: RuleContext): BlockResult | null {
     const { config, command } = context;

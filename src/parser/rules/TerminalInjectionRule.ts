@@ -9,6 +9,7 @@ import { checkTerminalInjection } from "../../security/validators";
  */
 export class TerminalInjectionRule implements SecurityRule {
   readonly name = "TerminalInjectionRule";
+  readonly phase = "pre" as const;
 
   check(context: RuleContext): BlockResult | null {
     const injection = checkTerminalInjection(context.command);

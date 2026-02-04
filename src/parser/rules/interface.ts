@@ -27,6 +27,13 @@ export interface RuleContext {
 export interface SecurityRule {
   /** Unique name of the rule for debugging/logging */
   name: string;
+
+  /**
+   * Execution phase for the rule.
+   * - pre: runs before shell parsing (fast string checks)
+   * - post: runs after parsing (token/AST checks)
+   */
+  phase: "pre" | "post";
   
   /**
    * Analyzes the command context for security violations.

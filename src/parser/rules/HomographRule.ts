@@ -9,6 +9,7 @@ import { hasHomograph } from "../../security/validators";
  */
 export class HomographRule implements SecurityRule {
   readonly name = "HomographRule";
+  readonly phase = "pre" as const;
 
   check(context: RuleContext): BlockResult | null {
     const { detected, char } = hasHomograph(context.command);

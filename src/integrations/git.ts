@@ -1,26 +1,58 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { basename, dirname } from "path";
 
 export function hasUncommittedChanges(files: string[]): string[] {
   try {
     if (files.length === 0) return [];
-    const results: string[] = [];
+    const results = new Set<string>();
+
+    const byDir = new Map<string, Array<{ original: string; pathspec: string }>>();
     for (const file of files) {
-      if (file.startsWith("-")) continue;
+      if (!file || file.startsWith("-")) continue;
+      const isAbsolute = file.startsWith("/");
+      const dir = isAbsolute ? dirname(file) : ".";
+      const pathspec = isAbsolute ? basename(file) : file;
+      const list = byDir.get(dir) ?? [];
+      list.push({ original: file, pathspec });
+      byDir.set(dir, list);
+    }
+
+    for (const [dir, entries] of byDir) {
       try {
-        const isAbsolute = file.startsWith("/");
-        const dir = isAbsolute ? dirname(file) : ".";
-        const name = isAbsolute ? basename(file) : file;
-        const status = execSync(
-          `git -C "${dir}" status --porcelain "${name}" 2>/dev/null`,
-          { encoding: "utf8" }
-        ).trim();
-        if (status) results.push(file);
+        const pathspecs = entries.map((e) => e.pathspec);
+        const out = execFileSync(
+          "git",
+          ["-C", dir, "status", "--porcelain", "--", ...pathspecs],
+          {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+          }
+        ).trimEnd();
+
+        if (!out) continue;
+
+        const pathspecToOriginal = new Map<string, string>();
+        for (const e of entries) {
+          pathspecToOriginal.set(e.pathspec, e.original);
+          if (e.pathspec.startsWith("./")) pathspecToOriginal.set(e.pathspec.slice(2), e.original);
+        }
+
+        for (const line of out.split("\n")) {
+          const rawPath = line.slice(3).trim();
+          if (!rawPath) continue;
+          const pathPart = rawPath.includes("->") ? rawPath.split("->").pop()!.trim() : rawPath;
+          const mapped =
+            pathspecToOriginal.get(pathPart) ||
+            pathspecToOriginal.get(pathPart.replace(/^\.\//, "")) ||
+            pathspecToOriginal.get(basename(pathPart));
+          if (mapped) results.add(mapped);
+        }
       } catch {
         continue;
       }
     }
-    return results;
+
+    return [...results];
   } catch {
     return [];
   }

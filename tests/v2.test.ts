@@ -4,7 +4,8 @@ import { join } from "path";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { execSync } from "child_process";
 
-const HOOK_PATH = join(import.meta.dir, "..", "src", "index.ts");
+const PROJECT_ROOT = join(import.meta.dir, "..");
+const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
 const TEST_DIR = join(import.meta.dir, "tmp-v2-tests");
 
 function setupTestDir() {
@@ -42,8 +43,9 @@ async function runHook(
     cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
     stdin: "pipe",
     stderr: "pipe",
-    stdout: "pipe",
-    env: { ...process.env, SHELLSHIELD_MODE: "enforce", ...env }
+    stdout: "ignore",
+    env: { ...process.env, SHELLSHIELD_MODE: "enforce", ...env },
+    cwd: PROJECT_ROOT,
   });
 
   if (proc.stdin) {
@@ -84,7 +86,17 @@ describe("ShellShield v2.0 - Git Safety", () => {
         mkdirSync(repoPath, { recursive: true });
         execSync("git init", { cwd: repoPath });
         writeFileSync(join(repoPath, "file.txt"), "hello");
-        execSync("git add file.txt && git commit -m 'initial'", { cwd: repoPath });
+        execSync("git add file.txt", { cwd: repoPath });
+        execSync("git commit -m 'initial'", {
+          cwd: repoPath,
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: "shellshield",
+            GIT_AUTHOR_EMAIL: "shellshield@example.com",
+            GIT_COMMITTER_NAME: "shellshield",
+            GIT_COMMITTER_EMAIL: "shellshield@example.com",
+          },
+        });
         writeFileSync(join(repoPath, "file.txt"), "hello world"); 
 
         const { exitCode, stderr } = await runHook(`rm ${join(repoPath, "file.txt")}`);

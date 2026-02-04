@@ -139,6 +139,7 @@ ShellShield works out of the box. Create `.shellshield.json` to customize:
 - `SHELLSHIELD_THRESHOLD`: max files per delete (default: 50)
 - `SHELLSHIELD_MODE`: set `permissive` or `interactive`
 - `SHELLSHIELD_SKIP=1`: bypass checks for next command
+- `SHELLSHIELD_MAX_SUBSHELL_DEPTH`: max nested `sh -c` analysis depth (default: 5)
 
 ### Shell Context (Aliases / Functions)
 

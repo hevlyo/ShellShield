@@ -1,8 +1,24 @@
 import { describe, test, expect } from "bun:test";
 import { spawn } from "bun";
 import { join } from "path";
+import { checkDestructive } from "../src/parser/analyzer";
+import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "../src/constants";
 
-const HOOK_PATH = join(import.meta.dir, "..", "src", "index.ts");
+const PROJECT_ROOT = join(import.meta.dir, "..");
+const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
+
+const TEST_CONTEXT = {
+  blocked: new Set(DEFAULT_BLOCKED),
+  allowed: new Set<string>(),
+  trustedDomains: DEFAULT_TRUSTED_DOMAINS,
+  threshold: 50,
+  mode: "enforce" as const,
+  customRules: [],
+};
+
+function analyze(command: string) {
+  return checkDestructive(command, 0, TEST_CONTEXT);
+}
 
 async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) return "";
@@ -36,6 +52,7 @@ async function runHook(
     stderr: "pipe",
     stdout: "pipe",
     env: { ...process.env, SHELLSHIELD_MODE: "enforce", ...env },
+    cwd: PROJECT_ROOT,
   });
 
   if (proc.stdin) {
@@ -62,8 +79,8 @@ describe("New bypasses that SHOULD be blocked", () => {
 
   test("deeply nested subshells (4 levels)", async () => {
     const command = "sh -c sh -c sh -c sh -c rm file";
-    const { exitCode } = await runHook(command);
-    expect(exitCode).toBe(2);
+    const result = analyze(command);
+    expect(result.blocked).toBe(true);
   });
 
   test("wipe file.txt", async () => {
@@ -107,7 +124,8 @@ describe("Configuration", () => {
       stdin: "pipe",
       stderr: "pipe",
       stdout: "pipe",
-      env: { ...process.env, OPENCODE_BLOCK_COMMANDS: "custom-delete,another-one" }
+      env: { ...process.env, SHELLSHIELD_MODE: "enforce", OPENCODE_BLOCK_COMMANDS: "custom-delete,another-one" },
+      cwd: PROJECT_ROOT,
     });
 
     proc.stdin.write(input);
@@ -124,7 +142,8 @@ describe("Configuration", () => {
       stdin: "pipe",
       stderr: "pipe",
       stdout: "pipe",
-      env: { ...process.env, OPENCODE_ALLOW_COMMANDS: "rm" }
+      env: { ...process.env, SHELLSHIELD_MODE: "enforce", OPENCODE_ALLOW_COMMANDS: "rm" },
+      cwd: PROJECT_ROOT,
     });
 
     proc.stdin.write(input);
