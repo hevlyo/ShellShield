@@ -17,6 +17,7 @@
   <img src="https://img.shields.io/badge/Bun-1.0+-black?style=for-the-badge&logo=bun" alt="Bun">
   <img src="https://img.shields.io/badge/Security-Hardened-red?style=for-the-badge" alt="Security Hardened">
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License MIT">
+  <img src="https://github.com/hevlyo/ShellShield/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
 </p>
 
 ---
