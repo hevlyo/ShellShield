@@ -1,9 +1,26 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeAll } from "bun:test";
 import { spawn } from "bun";
 import { join } from "path";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "index.ts");
+let canUseScript = false;
+
+beforeAll(async () => {
+  try {
+    const probe = spawn({
+      cmd: ["script", "-q", "-c", "echo ok", "/dev/null"],
+      stdin: "ignore",
+      stderr: "ignore",
+      stdout: "ignore",
+      cwd: PROJECT_ROOT,
+    });
+    const exitCode = await probe.exited;
+    canUseScript = exitCode === 0;
+  } catch {
+    canUseScript = false;
+  }
+});
 
 async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) return "";
@@ -73,6 +90,7 @@ describe("CLI output snapshots", () => {
   });
 
   test("interactive approve/cancel messaging", async () => {
+    if (!canUseScript) return;
     const denied = await runCheckTty("rm -rf /tmp/test", { SHELLSHIELD_MODE: "interactive" }, "n\n");
     expect(denied.output).toContain("Cancelled by user");
     expect(denied.output).toMatchSnapshot();

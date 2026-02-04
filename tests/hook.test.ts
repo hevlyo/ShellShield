@@ -42,17 +42,19 @@ async function runHook(command: string): Promise<{ exitCode: number; stderr: str
 
   const proc = spawn({
     cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
-    stdin: "pipe",
+    stdin: new Blob([input]),
     stderr: "pipe",
     stdout: "ignore",
-    env: { ...process.env, SHELLSHIELD_AUDIT_DISABLED: "1", SHELLSHIELD_MODE: "enforce" },
+    env: {
+      ...process.env,
+      SHELLSHIELD_AUDIT_DISABLED: "1",
+      SHELLSHIELD_MODE: "enforce",
+      SHELLSHIELD_SKIP: "0",
+      INIT_CWD: PROJECT_ROOT,
+      PWD: PROJECT_ROOT,
+    },
     cwd: PROJECT_ROOT,
   });
-
-  if (proc.stdin) {
-    proc.stdin.write(input);
-    proc.stdin.end();
-  }
 
   const exitCode = await proc.exited;
   const stderr = await readStream(proc.stderr);
@@ -239,15 +241,19 @@ describe("Edge cases", () => {
   test("invalid JSON input exits 0", async () => {
     const proc = spawn({
       cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
-      stdin: "pipe",
+      stdin: new Blob(["not valid json"]),
       stderr: "pipe",
       stdout: "ignore",
-      env: { ...process.env, SHELLSHIELD_AUDIT_DISABLED: "1", SHELLSHIELD_MODE: "enforce" },
+      env: {
+        ...process.env,
+        SHELLSHIELD_AUDIT_DISABLED: "1",
+        SHELLSHIELD_MODE: "enforce",
+        SHELLSHIELD_SKIP: "0",
+        INIT_CWD: PROJECT_ROOT,
+        PWD: PROJECT_ROOT,
+      },
       cwd: PROJECT_ROOT,
     });
-
-    proc.stdin.write("not valid json");
-    proc.stdin.end();
 
     const exitCode = await proc.exited;
     expect(exitCode).toBe(0);

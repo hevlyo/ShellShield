@@ -44,17 +44,20 @@ async function runHook(
 
   const proc = spawn({
     cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH, ...args],
-    stdin: "pipe",
+    stdin: new Blob([input]),
     stderr: "pipe",
     stdout: "pipe",
-    env: { ...process.env, SHELLSHIELD_AUDIT_DISABLED: "1", SHELLSHIELD_MODE: "enforce", ...env },
+    env: {
+      ...process.env,
+      SHELLSHIELD_AUDIT_DISABLED: "1",
+      SHELLSHIELD_MODE: "enforce",
+      SHELLSHIELD_SKIP: "0",
+      INIT_CWD: PROJECT_ROOT,
+      PWD: PROJECT_ROOT,
+      ...env,
+    },
     cwd: PROJECT_ROOT
   });
-
-  if (proc.stdin) {
-    proc.stdin.write(input);
-    proc.stdin.end();
-  }
 
   const exitCode = await proc.exited;
   
@@ -124,7 +127,13 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
       test("supports --check flag for direct command validation", async () => {
           const proc = spawnSync({
               cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH, "--check", "rm -rf /"],
-              env: { ...process.env, SHELLSHIELD_MODE: "enforce" },
+              env: {
+                ...process.env,
+                SHELLSHIELD_MODE: "enforce",
+                SHELLSHIELD_SKIP: "0",
+                INIT_CWD: PROJECT_ROOT,
+                PWD: PROJECT_ROOT,
+              },
               cwd: PROJECT_ROOT
           });
           expect(proc.exitCode).toBe(2);
@@ -134,7 +143,13 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
       test("supports --init flag for shell integration", async () => {
           const proc = spawnSync({
               cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH, "--init"],
-              env: { ...process.env, SHELL: "/bin/zsh" },
+              env: {
+                ...process.env,
+                SHELL: "/bin/zsh",
+                SHELLSHIELD_SKIP: "0",
+                INIT_CWD: PROJECT_ROOT,
+                PWD: PROJECT_ROOT,
+              },
               cwd: PROJECT_ROOT
           });
           expect(proc.exitCode).toBe(0);
@@ -144,14 +159,18 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
       test("supports raw command input via stdin (non-JSON)", async () => {
           const proc = spawn({
               cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
-              stdin: "pipe",
+              stdin: new Blob(["rm -rf /"]),
               stderr: "pipe",
               stdout: "ignore",
-              env: { ...process.env, SHELLSHIELD_MODE: "enforce" },
+              env: {
+                ...process.env,
+                SHELLSHIELD_MODE: "enforce",
+                SHELLSHIELD_SKIP: "0",
+                INIT_CWD: PROJECT_ROOT,
+                PWD: PROJECT_ROOT,
+              },
               cwd: PROJECT_ROOT
           });
-          proc.stdin.write("rm -rf /");
-          proc.stdin.end();
           const exitCode = await proc.exited;
           expect(exitCode).toBe(2);
       });
