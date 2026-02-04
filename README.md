@@ -18,6 +18,7 @@
   <img src="https://img.shields.io/badge/Security-Hardened-red?style=for-the-badge" alt="Security Hardened">
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License MIT">
   <img src="https://github.com/hevlyo/ShellShield/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
+  <img src="https://img.shields.io/badge/Dependabot-enabled-brightgreen?style=for-the-badge&logo=dependabot" alt="Dependabot">
 </p>
 
 ---
