@@ -137,7 +137,7 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
               cwd: PROJECT_ROOT
           });
           expect(proc.exitCode).toBe(0);
-          expect(proc.stdout.toString()).toContain("add-zsh-hook preexec");
+          expect(proc.stdout.toString()).toContain("zle -N accept-line");
       });
 
       test("supports raw command input via stdin (non-JSON)", async () => {

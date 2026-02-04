@@ -39,21 +39,28 @@ export async function main(): Promise<void> {
     if (shell === "zsh") {
       console.log(`
 # ShellShield Zsh Integration
-_shellshield_preexec() {
-    # Skip if SHELLSHIELD_SKIP is set
-    if [[ -n "$SHELLSHIELD_SKIP" ]]; then return 0; fi
-    # Run shellshield check
-    "${process.argv[1]}" --check "$1" || return $?
+_shellshield_accept_line() {
+    if [[ -n "$SHELLSHIELD_SKIP" ]]; then
+        zle .accept-line
+        return
+    fi
+    if command -v bun >/dev/null 2>&1; then
+        bun run "${process.argv[1]}" --check "$BUFFER" || return $?
+    fi
+    zle .accept-line
 }
+zle -N accept-line _shellshield_accept_line
 autoload -Uz add-zsh-hook
-add-zsh-hook preexec _shellshield_preexec
+add-zsh-hook -d preexec _shellshield_preexec 2>/dev/null
           `);
     } else {
       console.log(`
 # ShellShield Bash Integration
 _shellshield_bash_preexec() {
     if [[ -n "$SHELLSHIELD_SKIP" ]]; then return 0; fi
-    "${process.argv[1]}" --check "$BASH_COMMAND" || return $?
+    if command -v bun >/dev/null 2>&1; then
+        bun run "${process.argv[1]}" --check "$BASH_COMMAND" || return $?
+    fi
 }
 trap '_shellshield_bash_preexec' DEBUG
           `);

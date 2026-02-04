@@ -103,20 +103,29 @@ case "$USER_SHELL" in
     ;;
 esac
 
-HOOK_SCRIPT='
-# ShellShield Hook
-if [ -f "$HOME/.shellshield/src/index.ts" ]; then
-  eval "$(bun run "$HOME/.shellshield/src/index.ts" --init)"
+HOOK_BEGIN="# ShellShield Hook"
+HOOK_END="# ShellShield Hook End"
+HOOK_SCRIPT="
+$HOOK_BEGIN
+if [ -f \"$HOME/.shellshield/src/index.ts\" ]; then
+  eval \"\$(bun run \"$HOME/.shellshield/src/index.ts\" --init)\"
 fi
-'
+$HOOK_END
+"
 
 if [ -f "$PROFILE" ]; then
-  if grep -q "ShellShield Hook" "$PROFILE"; then
-    info "Hook already present in $PROFILE"
-  else
-    echo "$HOOK_SCRIPT" >> "$PROFILE"
-    info "Hook added to $PROFILE"
+  if grep -q "$HOOK_BEGIN" "$PROFILE"; then
+    tmp_profile=$(mktemp)
+    awk -v begin="$HOOK_BEGIN" -v end="$HOOK_END" '
+      $0==begin {skip=1; next}
+      $0==end {skip=0; next}
+      !skip {print}
+    ' "$PROFILE" > "$tmp_profile"
+    cat "$tmp_profile" > "$PROFILE"
+    rm "$tmp_profile"
   fi
+  echo "$HOOK_SCRIPT" >> "$PROFILE"
+  info "Hook added to $PROFILE"
 else
   info "Could not find shell profile ($PROFILE)."
   info_bold "Add this manually to your config:"
