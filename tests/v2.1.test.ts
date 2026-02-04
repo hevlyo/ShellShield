@@ -8,6 +8,7 @@ const PROJECT_ROOT = join(import.meta.dir, "..");
 const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
 const LOCAL_CONFIG = join(PROJECT_ROOT, ".shellshield.json");
 const LOCAL_CONFIG_SRC = join(PROJECT_ROOT, "src", ".shellshield.json");
+const BUN_PATH = process.execPath;
 
 function writeLocalConfig(config: Record<string, unknown>) {
   const content = JSON.stringify(config);
@@ -43,7 +44,7 @@ async function runHook(
   const input = JSON.stringify({ tool_input: { command } });
 
   const proc = spawn({
-    cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH, ...args],
+    cmd: [BUN_PATH, "run", HOOK_PATH, ...args],
     stdin: new Blob([input]),
     stderr: "pipe",
     stdout: "pipe",
@@ -126,7 +127,7 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
   describe("Standalone Mode", () => {
       test("supports --check flag for direct command validation", async () => {
           const proc = spawnSync({
-              cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH, "--check", "rm -rf /"],
+              cmd: [BUN_PATH, "run", HOOK_PATH, "--check", "rm -rf /"],
               env: {
                 ...process.env,
                 SHELLSHIELD_MODE: "enforce",
@@ -142,7 +143,7 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
 
       test("supports --init flag for shell integration", async () => {
           const proc = spawnSync({
-              cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH, "--init"],
+              cmd: [BUN_PATH, "run", HOOK_PATH, "--init"],
               env: {
                 ...process.env,
                 SHELL: "/bin/zsh",
@@ -158,7 +159,7 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
 
       test("supports raw command input via stdin (non-JSON)", async () => {
           const proc = spawn({
-              cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
+              cmd: [BUN_PATH, "run", HOOK_PATH],
               stdin: new Blob(["rm -rf /"]),
               stderr: "pipe",
               stdout: "ignore",

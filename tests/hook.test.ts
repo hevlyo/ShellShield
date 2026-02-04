@@ -6,6 +6,7 @@ import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "../src/constants";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
+const BUN_PATH = process.execPath;
 
 const TEST_CONTEXT = {
   blocked: new Set(DEFAULT_BLOCKED),
@@ -41,7 +42,7 @@ async function runHook(command: string): Promise<{ exitCode: number; stderr: str
   const input = JSON.stringify({ tool_input: { command } });
 
   const proc = spawn({
-    cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
+    cmd: [BUN_PATH, "run", HOOK_PATH],
     stdin: new Blob([input]),
     stderr: "pipe",
     stdout: "ignore",
@@ -240,7 +241,7 @@ describe("Edge cases", () => {
 
   test("invalid JSON input exits 0", async () => {
     const proc = spawn({
-      cmd: ["/home/hevlyo/.bun/bin/bun", "run", HOOK_PATH],
+      cmd: [BUN_PATH, "run", HOOK_PATH],
       stdin: new Blob(["not valid json"]),
       stderr: "pipe",
       stdout: "ignore",

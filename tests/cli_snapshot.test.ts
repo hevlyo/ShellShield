@@ -4,6 +4,7 @@ import { join } from "path";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "index.ts");
+const BUN_PATH = process.execPath;
 let canUseScript = false;
 
 beforeAll(async () => {
@@ -42,7 +43,7 @@ async function readStream(stream?: ReadableStream<Uint8Array> | null): Promise<s
 
 async function runCheck(command: string, env: Record<string, string> = {}, stdin?: string) {
   const proc = spawn({
-    cmd: ["/home/hevlyo/.bun/bin/bun", "run", CLI_PATH, "--check", command],
+    cmd: [BUN_PATH, "run", CLI_PATH, "--check", command],
     stdin: stdin ? "pipe" : "ignore",
     stderr: "pipe",
     stdout: "ignore",
@@ -59,7 +60,7 @@ async function runCheck(command: string, env: Record<string, string> = {}, stdin
 }
 
 async function runCheckTty(command: string, env: Record<string, string>, stdin: string) {
-  const fullCmd = `/home/hevlyo/.bun/bin/bun run "${CLI_PATH}" --check "${command.replace(/"/g, '\\"')}"`;
+  const fullCmd = `${BUN_PATH} run "${CLI_PATH}" --check "${command.replace(/"/g, '\\"')}"`;
   const proc = spawn({
     cmd: ["script", "-q", "-c", fullCmd, "/dev/null"],
     stdin: "pipe",
