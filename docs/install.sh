@@ -18,23 +18,22 @@ if [[ -t 1 ]]; then
 fi
 
 error() {
-  echo -e "${Red}error${Color_Off}:" "$@" >&2
+  echo -e "${Red}error${Color_Off}:" "$*" >&2
   exit 1
-  return 1
 }
 
 info() {
-  echo -e "${Dim}$@ ${Color_Off}"
+  echo -e "${Dim}$* ${Color_Off}"
   return 0
 }
 
 info_bold() {
-  echo -e "${Bold_White}$@ ${Color_Off}"
+  echo -e "${Bold_White}$* ${Color_Off}"
   return 0
 }
 
 success() {
-  echo -e "${Green}$@ ${Color_Off}"
+  echo -e "${Green}$* ${Color_Off}"
   return 0
 }
 
@@ -138,7 +137,7 @@ HOOK_BEGIN="# ShellShield Hook"
 HOOK_END="# ShellShield Hook End"
 HOOK_SCRIPT="
 $HOOK_BEGIN
-if [[ -f \"$HOME/.shellshield/src/index.ts\" ]]; then
+if [ -f \"$HOME/.shellshield/src/index.ts\" ]; then
   eval \"\$(bun run \"$HOME/.shellshield/src/index.ts\" --init)\"
 fi
 $HOOK_END

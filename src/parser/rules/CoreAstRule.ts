@@ -81,14 +81,14 @@ export class CoreAstRule implements SecurityRule {
   }
 
   private resolveCmdName(entry: string, vars: Record<string, string>): string {
-    const basenamePart = entry.split("/").pop() ?? "";
-    const cmdName = entry.startsWith("\\") ? entry.slice(1) : basenamePart;
+    const stripped = entry.startsWith("\\") ? entry.slice(1) : entry;
+    const basenamePart = stripped.split("/").pop() ?? "";
 
-    const resolvedVar = this.resolveVarToken(cmdName, vars);
+    const resolvedVar = this.resolveVarToken(basenamePart, vars);
     if (resolvedVar) {
       return resolvedVar.split("/").pop()?.toLowerCase() ?? "";
     }
-    return cmdName.toLowerCase();
+    return basenamePart.toLowerCase();
   }
 
   private checkGitRm(normalizedEntry: string, tokens: ParsedEntry[], i: number): number {

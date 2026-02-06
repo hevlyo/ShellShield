@@ -123,7 +123,7 @@ async function promptConfirmation(command: string, reason: string): Promise<bool
   });
 
   return new Promise((resolve) => {
-    const promptMsg = String.raw`\n⚠️  ShellShield ALERT: ${reason}\n   Command: ${command}\n   Are you sure you want to execute this? [y/N] `;
+    const promptMsg = `\n⚠️  ShellShield ALERT: ${reason}\n   Command: ${command}\n   Are you sure you want to execute this? [y/N] `;
     rl.question(
       promptMsg,
       (answer) => {
@@ -143,7 +143,7 @@ async function checkAndAuditCommand(command: string, config: any, source: "check
   }
 
   if (config?.mode === "permissive") {
-    const warningHeader = String.raw`⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.`;
+    const warningHeader = `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.`;
     console.error(
       `${warningHeader}\n` +
         `Reason: ${result.reason}\n` +
@@ -159,7 +159,7 @@ async function checkAndAuditCommand(command: string, config: any, source: "check
       logAudit(command, { ...result, blocked: false }, { source, mode: config?.mode, threshold: config?.threshold, decision: "approved" });
       const msg = "Approved. Command will execute.";
       const tty = process.stderr.isTTY;
-      console.error(tty ? String.raw`\x1b[32m${msg}\x1b[0m` : msg);
+      console.error(tty ? `\x1b[32m${msg}\x1b[0m` : msg);
       return true;
     }
   }
