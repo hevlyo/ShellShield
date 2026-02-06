@@ -24,7 +24,7 @@ export function formatBlockedMessage(reason: string, suggestion: string, isTty: 
   const { red, yellow, cyan, dim, gray, bold, reset } = getAnsiPalette(isTty);
   const line = `${gray}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset}`;
 
-  const highlightedSuggestion = suggestion.replace(
+  const highlightedSuggestion = suggestion.replaceAll(
     /(\/[^\s"']+|[A-Za-z]:\\[^\s"']+)/g,
     `${cyan}$1${reset}`
   );

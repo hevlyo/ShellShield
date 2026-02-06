@@ -21,6 +21,84 @@ export class CoreAstRule implements SecurityRule {
   readonly name = "CoreAstRule";
   readonly phase = "post" as const;
 
+  private checkEnvironmentVariable(entry: string, vars: Record<string, string>): boolean {
+    if (entry.includes("=") && !entry.startsWith("-")) {
+      const [key, ...valParts] = entry.split("=");
+      if (/^\w+$/.test(key)) {
+        vars[key] = valParts.join("=");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private checkSensitivePathWrite(entry: string, tokens: ParsedEntry[], i: number): BlockResult | null {
+    if ((entry === "-o" || entry === "-O" || entry === "--output") && i + 1 < tokens.length) {
+      const outputPath = tokens[i + 1];
+      if (typeof outputPath === "string" && isSensitivePath(outputPath)) {
+        return {
+          blocked: true,
+          reason: "SENSITIVE PATH TARGETED",
+          suggestion: `Command is attempting to write directly to a critical configuration file: ${outputPath}`,
+        };
+      }
+    }
+    return null;
+  }
+
+  private checkCurlWget(normalizedEntry: string, tokens: ParsedEntry[], i: number, config: any): BlockResult | null {
+    if (normalizedEntry === "curl" || normalizedEntry === "wget") {
+      const remaining = tokens.slice(i + 1);
+      const args = remaining.filter((item) => typeof item === "string") as string[];
+      const pipeCheck = checkPipeToShell(args, remaining, config.trustedDomains);
+      if (pipeCheck) return pipeCheck;
+
+      return this.checkDownloadAndExec(remaining, args);
+    }
+    return null;
+  }
+
+  private checkProcessSubstitution(normalizedEntry: string, tokens: ParsedEntry[], i: number): BlockResult | null {
+    if (normalizedEntry === "bash" || normalizedEntry === "sh" || normalizedEntry === "zsh") {
+      const remaining = tokens.slice(i + 1);
+      const hasSubstitution = remaining.some(
+        (item) =>
+          typeof item === "string" &&
+          (item.includes("<(curl") ||
+            item.includes("<(wget") ||
+            item.includes("< <(curl") ||
+            item.includes("< <(wget"))
+      );
+      if (hasSubstitution) {
+        return {
+          blocked: true,
+          reason: "PROCESS SUBSTITUTION DETECTED",
+          suggestion: "Executing remote scripts via process substitution is dangerous.",
+        };
+      }
+    }
+    return null;
+  }
+
+  private checkShellContext(resolvedCmd: string, config: any): BlockResult | null {
+    if (!config.blocked.has(resolvedCmd)) {
+      const ctxEntry = getShellContextEntry(resolvedCmd);
+      if (ctxEntry && (ctxEntry.kind === "alias" || ctxEntry.kind === "function")) {
+        const hit = findBlockedTokenInShellContext(ctxEntry, config.blocked);
+        if (hit && hit !== resolvedCmd) {
+          return {
+            blocked: true,
+            reason: "SHELL CONTEXT OVERRIDE DETECTED",
+            suggestion:
+              `Your shell ${ctxEntry.kind} for '${resolvedCmd}' references '${hit}'. ` +
+              `Inspect with: type ${resolvedCmd}. Prefer bypass with: \\${resolvedCmd} or command ${resolvedCmd}.`,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
   check(context: RuleContext): BlockResult | null {
     const { tokens, config, depth, recursiveCheck } = context;
     const vars: Record<string, string> = {};
@@ -49,69 +127,26 @@ export class CoreAstRule implements SecurityRule {
       }
 
       if (!nextMustBeCommand) {
-        if (entry.includes("=") && !entry.startsWith("-")) {
-          const [key, ...valParts] = entry.split("=");
-          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
-            vars[key] = valParts.join("=");
-          }
-        }
-
-        if ((entry === "-o" || entry === "-O" || entry === "--output") && i + 1 < tokens.length) {
-          const outputPath = tokens[i + 1];
-          if (typeof outputPath === "string" && isSensitivePath(outputPath)) {
-            return {
-              blocked: true,
-              reason: "SENSITIVE PATH TARGETED",
-              suggestion: `Command is attempting to write directly to a critical configuration file: ${outputPath}`,
-            };
-          }
-        }
+        this.checkEnvironmentVariable(entry, vars);
+        const pathCheck = this.checkSensitivePathWrite(entry, tokens, i);
+        if (pathCheck) return pathCheck;
         continue;
       }
 
       nextMustBeCommand = false;
 
-      if (entry.includes("=") && !entry.startsWith("-")) {
-        const [key, ...valParts] = entry.split("=");
-        if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
-          vars[key] = valParts.join("=");
-        }
+      if (this.checkEnvironmentVariable(entry, vars)) {
         nextMustBeCommand = true;
         continue;
       }
 
       const normalizedEntry = entry.toLowerCase();
 
-      if (normalizedEntry === "curl" || normalizedEntry === "wget") {
-        const remaining = tokens.slice(i + 1);
-        const args = remaining.filter((item) => typeof item === "string") as string[];
-        const pipeCheck = checkPipeToShell(args, remaining, config.trustedDomains);
-        if (pipeCheck) return pipeCheck;
+      const curlCheck = this.checkCurlWget(normalizedEntry, tokens, i, config);
+      if (curlCheck) return curlCheck;
 
-        // checkDownloadAndExec logic will be imported or implemented here
-        const downloadExecCheck = this.checkDownloadAndExec(remaining, args);
-        if (downloadExecCheck) return downloadExecCheck;
-      }
-
-      if (normalizedEntry === "bash" || normalizedEntry === "sh" || normalizedEntry === "zsh") {
-        const remaining = tokens.slice(i + 1);
-        if (
-          remaining.some(
-            (item) =>
-              typeof item === "string" &&
-              (item.includes("<(curl") ||
-                item.includes("<(wget") ||
-                item.includes("< <(curl") ||
-                item.includes("< <(wget"))
-          )
-        ) {
-          return {
-            blocked: true,
-            reason: "PROCESS SUBSTITUTION DETECTED",
-            suggestion: "Executing remote scripts via process substitution is dangerous.",
-          };
-        }
-      }
+      const subCheck = this.checkProcessSubstitution(normalizedEntry, tokens, i);
+      if (subCheck) return subCheck;
 
       if (["sudo", "xargs", "command", "env"].includes(normalizedEntry)) {
         nextMustBeCommand = true;
@@ -135,23 +170,8 @@ export class CoreAstRule implements SecurityRule {
         resolvedCmd = resolvedVar.split("/").pop()?.toLowerCase() ?? "";
       }
 
-      // Optional shell-context awareness (aliases/functions).
-      // Enable by setting SHELLSHIELD_CONTEXT_PATH to a snapshot file.
-      if (!config.blocked.has(resolvedCmd)) {
-        const ctxEntry = getShellContextEntry(resolvedCmd);
-        if (ctxEntry && (ctxEntry.kind === "alias" || ctxEntry.kind === "function")) {
-          const hit = findBlockedTokenInShellContext(ctxEntry, config.blocked);
-          if (hit && hit !== resolvedCmd) {
-            return {
-              blocked: true,
-              reason: "SHELL CONTEXT OVERRIDE DETECTED",
-              suggestion:
-                `Your shell ${ctxEntry.kind} for '${resolvedCmd}' references '${hit}'. ` +
-                `Inspect with: type ${resolvedCmd}. Prefer bypass with: \\${resolvedCmd} or command ${resolvedCmd}.`,
-            };
-          }
-        }
-      }
+      const ctxCheck = this.checkShellContext(resolvedCmd, config);
+      if (ctxCheck) return ctxCheck;
 
       if (config.allowed.has(resolvedCmd)) {
         continue;
@@ -166,8 +186,7 @@ export class CoreAstRule implements SecurityRule {
       if (blockedCheck) return blockedCheck;
 
       if (resolvedCmd === "find") {
-        const remaining = tokens.slice(i + 1);
-        const findCheck = checkFindCommand(remaining, config.blocked);
+        const findCheck = checkFindCommand(tokens.slice(i + 1), config.blocked);
         if (findCheck) return findCheck;
       }
 

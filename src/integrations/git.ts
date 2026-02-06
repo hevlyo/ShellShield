@@ -1,6 +1,31 @@
 import { execFileSync } from "node:child_process";
 import { basename, dirname } from "node:path";
 
+function processGitStatusOutput(
+  out: string,
+  entries: Array<{ original: string; pathspec: string }>,
+  results: Set<string>
+): void {
+  const pathspecToOriginal = new Map<string, string>();
+  for (const entry of entries) {
+    pathspecToOriginal.set(entry.pathspec, entry.original);
+    if (entry.pathspec.startsWith("./")) {
+      pathspecToOriginal.set(entry.pathspec.slice(2), entry.original);
+    }
+  }
+
+  for (const line of out.split("\n")) {
+    const rawPath = line.slice(3).trim();
+    if (!rawPath) continue;
+    const pathPart = rawPath.includes("->") ? rawPath.split("->").pop()!.trim() : rawPath;
+    const mapped =
+      pathspecToOriginal.get(pathPart) ||
+      pathspecToOriginal.get(pathPart.replace(/^\.\//, "")) ||
+      pathspecToOriginal.get(basename(pathPart));
+    if (mapped) results.add(mapped);
+  }
+}
+
 export function hasUncommittedChanges(files: string[]): string[] {
   try {
     if (files.length === 0) return [];
@@ -29,23 +54,8 @@ export function hasUncommittedChanges(files: string[]): string[] {
           }
         ).trimEnd();
 
-        if (!out) continue;
-
-        const pathspecToOriginal = new Map<string, string>();
-        for (const e of entries) {
-          pathspecToOriginal.set(e.pathspec, e.original);
-          if (e.pathspec.startsWith("./")) pathspecToOriginal.set(e.pathspec.slice(2), e.original);
-        }
-
-        for (const line of out.split("\n")) {
-          const rawPath = line.slice(3).trim();
-          if (!rawPath) continue;
-          const pathPart = rawPath.includes("->") ? rawPath.split("->").pop()!.trim() : rawPath;
-          const mapped =
-            pathspecToOriginal.get(pathPart) ||
-            pathspecToOriginal.get(pathPart.replace(/^\.\//, "")) ||
-            pathspecToOriginal.get(basename(pathPart));
-          if (mapped) results.add(mapped);
+        if (out) {
+          processGitStatusOutput(out, entries, results);
         }
       } catch {
         continue;

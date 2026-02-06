@@ -10,6 +10,9 @@ export class RawThreatRule implements SecurityRule {
   readonly name = "RawThreatRule";
   readonly phase = "pre" as const;
 
+  private readonly interpreters = ["sh", "bash", "zsh", "dash", "fish", "pwsh", "powershell", "python\\d*", "perl", "ruby", "node", "bun", "php"];
+  private readonly commandFlags = ["-c", "-e", "-command"];
+
   private readonly patterns: Array<{ pattern: RegExp; reason: string; suggestion: string }> = [
     {
       pattern: /\b(?:pwsh|powershell)\b\s+(?:-encodedcommand|-enc)\b/i,
@@ -27,12 +30,12 @@ export class RawThreatRule implements SecurityRule {
       suggestion: "Avoid eval with remote content. Download and review the script first.",
     },
     {
-      pattern: /(?:sh|bash|zsh|dash|fish|pwsh|powershell|python\d*|perl|ruby|node|bun|php)\s+(?:-c|-e|-command)\s+["']?\$\((curl|wget)\b/i,
+      pattern: new RegExp(`(?:${this.interpreters.join("|")})\\s+(?:${this.commandFlags.join("|")})\\s+["']?\\$\\((curl|wget)\\b`, "i"),
       reason: "COMMAND SUBSTITUTION DETECTED",
       suggestion: "Executing remote scripts via command substitution is dangerous.",
     },
     {
-      pattern: /(?:sh|bash|zsh|dash|fish|pwsh|powershell|python\d*|perl|ruby|node|bun|php)\s+(?:-c|-e|-command)\s+["']?`(curl|wget)\b/i,
+      pattern: new RegExp(`(?:${this.interpreters.join("|")})\\s+(?:${this.commandFlags.join("|")})\\s+["']?\`(curl|wget)\\b`, "i"),
       reason: "COMMAND SUBSTITUTION DETECTED",
       suggestion: "Executing remote scripts via command substitution is dangerous.",
     },

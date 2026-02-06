@@ -102,7 +102,7 @@ export function getConfiguration(): Config {
   const trustedDomains = fileConfig.trustedDomains || DEFAULT_TRUSTED_DOMAINS;
 
   const threshold =
-    fileConfig.threshold || parseInt(process.env.SHELLSHIELD_THRESHOLD || "50", 10);
+    fileConfig.threshold || Number.parseInt(process.env.SHELLSHIELD_THRESHOLD || "50", 10);
 
   const maxSubshellDepth =
     fileConfig.maxSubshellDepth ??

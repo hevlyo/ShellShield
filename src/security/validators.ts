@@ -25,7 +25,8 @@ export function hasHomograph(str: string): { detected: boolean; char?: string } 
       const isHidden = /[\u200B-\u200D\uFEFF]/.test(char);
       if (isHidden) continue;
 
-      const code = char.charCodeAt(0);
+      const code = char.codePointAt(0);
+      if (code === undefined) continue;
       const lower = char.toLowerCase();
 
       // Only consider letters for script mixing heuristics
@@ -77,7 +78,7 @@ export function hasHomograph(str: string): { detected: boolean; char?: string } 
 }
 
 export function checkTerminalInjection(str: string): TerminalInjectionResult {
-  if (/\x1b\[/.test(str)) {
+  if (str.includes("\x1b[")) {
     return { detected: true, reason: "TERMINAL INJECTION DETECTED" };
   }
   if (/[\u200B-\u200D\uFEFF]/.test(str)) {

@@ -131,31 +131,31 @@ async function promptConfirmation(command: string, reason: string): Promise<bool
 async function checkAndAuditCommand(command: string, config: any, source: "check" | "paste" | "stdin"): Promise<boolean> {
   const result = checkDestructive(command);
   if (!result.blocked) {
-    logAudit(command, result, { source, mode: config.mode, threshold: config.threshold, decision: "allowed" });
+    logAudit(command, result, { source, mode: config?.mode, threshold: config?.threshold, decision: "allowed" });
     return true;
   }
 
-  if (config.mode === "permissive") {
+  if (config?.mode === "permissive") {
     console.error(
       `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
         `Reason: ${result.reason}\n` +
         `Suggestion: ${result.suggestion}`
     );
-    logAudit(command, { ...result, blocked: false }, { source, mode: config.mode, threshold: config.threshold, decision: "warn" });
+    logAudit(command, { ...result, blocked: false }, { source, mode: config?.mode, threshold: config?.threshold, decision: "warn" });
     return true;
   }
 
-  if (config.mode === "interactive") {
+  if (config?.mode === "interactive") {
     const confirmed = await promptConfirmation(command, result.reason);
     if (confirmed) {
-      logAudit(command, { ...result, blocked: false }, { source, mode: config.mode, threshold: config.threshold, decision: "approved" });
+      logAudit(command, { ...result, blocked: false }, { source, mode: config?.mode, threshold: config?.threshold, decision: "approved" });
       const msg = "Approved. Command will execute.";
       console.error(process.stderr.isTTY ? `\x1b[32m${msg}\x1b[0m` : msg);
       return true;
     }
   }
 
-  logAudit(command, result, { source, mode: config.mode, threshold: config.threshold, decision: "blocked" });
+  logAudit(command, result, { source, mode: config?.mode, threshold: config?.threshold, decision: "blocked" });
   showBlockedMessage(result.reason, result.suggestion);
   return false;
 }
