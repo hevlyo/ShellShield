@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
-import { homedir } from "os";
-import { dirname, resolve } from "path";
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, resolve } from "node:path";
 
 export type ShellContextKind =
   | "alias"

@@ -1,8 +1,8 @@
 import { describe, test, expect } from "bun:test";
 import { spawn } from "bun";
-import { join } from "path";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
-import { execSync } from "child_process";
+import { join } from "node:path";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { checkDestructive } from "../src/parser/analyzer";
 import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "../src/constants";
 

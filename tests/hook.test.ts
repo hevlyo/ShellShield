@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { spawn } from "bun";
-import { join } from "path";
+import { join } from "node:path";
 import { checkDestructive } from "../src/parser/analyzer";
 import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "../src/constants";
 

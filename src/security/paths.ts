@@ -1,4 +1,4 @@
-import { homedir } from "os";
+import { homedir } from "node:os";
 import { CRITICAL_PATHS, SENSITIVE_PATTERNS } from "../constants";
 
 export function isCriticalPath(path: string): boolean {

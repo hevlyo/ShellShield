@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "fs";
-import { join, dirname } from "path";
-import { homedir } from "os";
+import { existsSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { homedir } from "node:os";
 import { z } from "zod";
 import { Config } from "./types";
 import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "./constants";

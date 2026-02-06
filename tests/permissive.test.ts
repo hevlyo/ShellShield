@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawn } from "bun";
-import { join, resolve } from "path";
+import { join, resolve } from "node:path";
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "index.ts");

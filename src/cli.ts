@@ -2,12 +2,12 @@ import { checkDestructive } from "./parser/analyzer";
 import { logAudit } from "./audit";
 import { getConfiguration } from "./config";
 import { ToolInput } from "./types";
-import { createInterface } from "readline";
+import { createInterface } from "node:readline";
 import { printStats } from "./stats";
 import { formatBlockedMessage } from "./ui/terminal";
 import { writeShellContextSnapshot, parseTypeOutput, ShellContextSnapshot } from "./shell-context";
-import { homedir } from "os";
-import { resolve } from "path";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { scoreUrlRisk } from "./security/validators";
 import { parse } from "shell-quote";
 
@@ -67,16 +67,14 @@ function parseCsvArg(value: string | undefined): string[] {
 function hasBypassPrefix(command: string): boolean {
   try {
     const tokens = parse(command) as Array<string | { op: string }>;
-    let sawCommand = false;
     let bypass = false;
 
     for (const token of tokens) {
       if (typeof token !== "string") {
-        if (!sawCommand) break;
-        continue;
+        break;
       }
 
-      if (!sawCommand && token.includes("=")) {
+      if (token.includes("=")) {
         const [key, value] = token.split("=", 2);
         if (key === "SHELLSHIELD_SKIP" && value === "1") {
           bypass = true;
@@ -84,7 +82,6 @@ function hasBypassPrefix(command: string): boolean {
         continue;
       }
 
-      sawCommand = true;
       break;
     }
 
@@ -131,22 +128,176 @@ async function promptConfirmation(command: string, reason: string): Promise<bool
   });
 }
 
-export async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const config = getConfiguration();
+async function handleCheck(args: string[], config: any): Promise<void> {
+  const cmdIdx = args.indexOf("--check");
+  const command = args[cmdIdx + 1];
+  if (!command) process.exit(0);
 
-  if (process.env.SHELLSHIELD_SKIP === "1") {
+  if (hasBypassPrefix(command)) {
     process.exit(0);
   }
 
-  if (args.includes("--init")) {
-    const shellPath = process.env.SHELL || "";
-    const fallbackShell =
-      !shellPath && (process.env.PSModulePath || process.env.ComSpec) ? "powershell" : "bash";
-    const shellNameRaw = shellPath.split(/[\\/]/).pop() || fallbackShell;
-    const shellName = shellNameRaw.replace(/\.exe$/i, "").toLowerCase();
-    if (shellName === "zsh") {
-      console.log(`
+  const result = checkDestructive(command);
+  if (result.blocked) {
+    if (config.mode === "permissive") {
+      console.error(
+        `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
+          `Reason: ${result.reason}\n` +
+          `Suggestion: ${result.suggestion}`
+      );
+      logAudit(command, { ...result, blocked: false }, { source: "check", mode: config.mode, threshold: config.threshold, decision: "warn" });
+      process.exit(0);
+    }
+    if (config.mode === "interactive") {
+      const confirmed = await promptConfirmation(command, result.reason);
+      if (confirmed) {
+        logAudit(command, { ...result, blocked: false }, { source: "check", mode: config.mode, threshold: config.threshold, decision: "approved" });
+        if (process.stderr.isTTY) {
+          console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
+        } else {
+          console.error("Approved. Command will execute.");
+        }
+        process.exit(0);
+      }
+    }
+
+    logAudit(command, result, { source: "check", mode: config.mode, threshold: config.threshold, decision: "blocked" });
+    showBlockedMessage(result.reason, result.suggestion);
+    process.exit(2);
+  }
+  logAudit(command, result, { source: "check", mode: config.mode, threshold: config.threshold, decision: "allowed" });
+  process.exit(0);
+}
+
+async function handlePaste(config: any): Promise<void> {
+  try {
+    const input = await Bun.stdin.text();
+    if (!input) process.exit(0);
+
+    const lines = input.split(/\r?\n/);
+    for (const line of lines) {
+      const command = line.trim();
+      if (!command) continue;
+
+      if (hasBypassPrefix(command)) {
+        continue;
+      }
+
+      const result = checkDestructive(command);
+      if (result.blocked) {
+        if (config.mode === "permissive") {
+          console.error(
+            `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
+              `Reason: ${result.reason}\n` +
+              `Suggestion: ${result.suggestion}`
+          );
+          logAudit(command, { ...result, blocked: false }, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "warn" });
+          continue;
+        }
+        if (config.mode === "interactive") {
+          const confirmed = await promptConfirmation(command, result.reason);
+          if (confirmed) {
+            logAudit(command, { ...result, blocked: false }, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "approved" });
+            if (process.stderr.isTTY) {
+              console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
+            } else {
+              console.error("Approved. Command will execute.");
+            }
+            continue;
+          }
+        }
+
+        logAudit(command, result, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "blocked" });
+        showBlockedMessage(result.reason, result.suggestion);
+        process.exit(2);
+      }
+
+      logAudit(command, result, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "allowed" });
+    }
+
+    process.exit(0);
+  } catch (error) {
+    if (process.env.DEBUG) console.error(error);
+    process.exit(0);
+  }
+}
+
+function handleSnapshot(args: string[], config: any): void {
+  if (args.includes("--help") || args.includes("-h")) {
+    printSnapshotHelp();
+    process.exit(0);
+  }
+
+  const outIdx = args.indexOf("--out");
+  const outPath = outIdx !== -1 ? args[outIdx + 1] : "";
+  const shellIdx = args.indexOf("--shell");
+  const shellArg = shellIdx !== -1 ? args[shellIdx + 1] : "";
+  const commandsIdx = args.indexOf("--commands");
+  const commandsArg = commandsIdx !== -1 ? args[commandsIdx + 1] : "";
+
+  const shell = (shellArg && shellArg.trim()) || process.env.SHELL || "/bin/bash";
+  const safeShell = /^[A-Za-z0-9_./-]+$/.test(shell) ? shell : "/bin/bash";
+
+  const common = ["ls", "rm", "mv", "cp", "cat", "grep", "find", "xargs", "git", "curl", "wget", "sh", "bash", "zsh"];
+  const requested = parseCsvArg(commandsArg);
+  const cmdList = (requested.length > 0 ? requested : [...config.blocked, ...common])
+    .map((c) => c.trim())
+    .filter((c) => isSafeCommandName(c));
+
+  const uniq = Array.from(new Set(cmdList.map((c) => c.toLowerCase())));
+  const entries: ShellContextSnapshot["entries"] = {};
+
+  for (const cmd of uniq) {
+    const probe = runProbe([safeShell, "-ic", `type ${cmd} 2>/dev/null`]);
+    if (!probe.out) continue;
+    entries[cmd] = parseTypeOutput(probe.out);
+  }
+
+  const snapshot: ShellContextSnapshot = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    shell: safeShell,
+    entries,
+  };
+
+  const finalOut = outPath && outPath.trim().length > 0 ? outPath.trim() : defaultSnapshotPath();
+  writeShellContextSnapshot(finalOut, snapshot);
+  console.log(finalOut);
+  process.exit(0);
+}
+
+function handleScore(args: string[], config: any): void {
+  const idx = args.indexOf("--score");
+  const url = args[idx + 1];
+  if (!url) {
+    console.error("Usage: shellshield --score <url>");
+    process.exit(1);
+  }
+  const result = scoreUrlRisk(url, config.trustedDomains);
+  const json = args.includes("--json");
+  if (json) {
+    console.log(JSON.stringify(result));
+  } else {
+    console.log(`Score: ${result.score}/100`);
+    console.log(`Trusted: ${result.trusted ? "yes" : "no"}`);
+    if (result.reasons.length > 0) {
+      console.log("Reasons:");
+      for (const reason of result.reasons) {
+        console.log(`- ${reason}`);
+      }
+    }
+  }
+  process.exit(0);
+}
+
+function handleInit(): void {
+  const shellPath = process.env.SHELL || "";
+  const fallbackShell =
+    !shellPath && (process.env.PSModulePath || process.env.ComSpec) ? "powershell" : "bash";
+  const shellNameRaw = shellPath.split(/[\\/]/).pop() || fallbackShell;
+  const shellName = shellNameRaw.replace(/\.exe$/i, "").toLowerCase();
+  if (shellName === "zsh") {
+    console.log(`
 # ShellShield Zsh Integration
 _shellshield_accept_line() {
     if [[ -n "$SHELLSHIELD_SKIP" ]]; then
@@ -198,8 +349,8 @@ if [[ "$SHELLSHIELD_PASTE_HOOK" == "1" ]]; then
     zle -N bracketed-paste _shellshield_bracketed_paste
 fi
           `);
-    } else if (shellName === "fish") {
-      console.log(`
+  } else if (shellName === "fish") {
+    console.log(`
 # ShellShield Fish Integration
 function __shellshield_preexec --on-event fish_preexec
     if test -n "$SHELLSHIELD_SKIP"
@@ -230,8 +381,8 @@ if test "$SHELLSHIELD_AUTO_SNAPSHOT" = "1"
     end
 end
           `);
-    } else if (shellName === "pwsh" || shellName === "powershell") {
-      console.log(`
+  } else if (shellName === "pwsh" || shellName === "powershell") {
+    console.log(`
 # ShellShield PowerShell Integration
 if (Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
   Set-PSReadLineKeyHandler -Key Enter -ScriptBlock {
@@ -255,8 +406,8 @@ if (Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
   Write-Host "PSReadLine not available; cannot hook Enter key."
 }
           `);
-    } else {
-      console.log(`
+  } else {
+    console.log(`
 # ShellShield Bash Integration
 _shellshield_bash_preexec() {
     if [[ -n "$SHELLSHIELD_SKIP" ]]; then return 0; fi
@@ -280,182 +431,11 @@ if [[ "$SHELLSHIELD_AUTO_SNAPSHOT" == "1" ]]; then
     fi
 fi
           `);
-    }
-    process.exit(0);
   }
+  process.exit(0);
+}
 
-  if (args.includes("--stats")) {
-    printStats();
-    process.exit(0);
-  }
-
-  if (args.includes("--doctor")) {
-    printDoctor();
-    process.exit(0);
-  }
-
-  if (args.includes("--score")) {
-    const idx = args.indexOf("--score");
-    const url = args[idx + 1];
-    if (!url) {
-      console.error("Usage: shellshield --score <url>");
-      process.exit(1);
-    }
-    const result = scoreUrlRisk(url, config.trustedDomains);
-    const json = args.includes("--json");
-    if (json) {
-      console.log(JSON.stringify(result));
-    } else {
-      console.log(`Score: ${result.score}/100`);
-      console.log(`Trusted: ${result.trusted ? "yes" : "no"}`);
-      if (result.reasons.length > 0) {
-        console.log("Reasons:");
-        for (const reason of result.reasons) {
-          console.log(`- ${reason}`);
-        }
-      }
-    }
-    process.exit(0);
-  }
-
-  if (args.includes("--snapshot")) {
-    if (args.includes("--help") || args.includes("-h")) {
-      printSnapshotHelp();
-      process.exit(0);
-    }
-
-    const outIdx = args.indexOf("--out");
-    const outPath = outIdx !== -1 ? args[outIdx + 1] : "";
-    const shellIdx = args.indexOf("--shell");
-    const shellArg = shellIdx !== -1 ? args[shellIdx + 1] : "";
-    const commandsIdx = args.indexOf("--commands");
-    const commandsArg = commandsIdx !== -1 ? args[commandsIdx + 1] : "";
-
-    const shell = (shellArg && shellArg.trim()) || process.env.SHELL || "/bin/bash";
-    const safeShell = /^[A-Za-z0-9_./-]+$/.test(shell) ? shell : "/bin/bash";
-
-    const common = ["ls", "rm", "mv", "cp", "cat", "grep", "find", "xargs", "git", "curl", "wget", "sh", "bash", "zsh"];
-    const requested = parseCsvArg(commandsArg);
-    const cmdList = (requested.length > 0 ? requested : [...config.blocked, ...common])
-      .map((c) => c.trim())
-      .filter((c) => isSafeCommandName(c));
-
-    const uniq = Array.from(new Set(cmdList.map((c) => c.toLowerCase())));
-    const entries: ShellContextSnapshot["entries"] = {};
-
-    for (const cmd of uniq) {
-      const probe = runProbe([safeShell, "-ic", `type ${cmd} 2>/dev/null`]);
-      if (!probe.out) continue;
-      entries[cmd] = parseTypeOutput(probe.out);
-    }
-
-    const snapshot: ShellContextSnapshot = {
-      version: 1,
-      generatedAt: new Date().toISOString(),
-      shell: safeShell,
-      entries,
-    };
-
-    const finalOut = outPath && outPath.trim().length > 0 ? outPath.trim() : defaultSnapshotPath();
-    writeShellContextSnapshot(finalOut, snapshot);
-    console.log(finalOut);
-    process.exit(0);
-  }
-
-  if (args.includes("--paste")) {
-    try {
-      const input = await Bun.stdin.text();
-      if (!input) process.exit(0);
-
-      const lines = input.split(/\r?\n/);
-      for (const line of lines) {
-        const command = line.trim();
-        if (!command) continue;
-
-        if (hasBypassPrefix(command)) {
-          continue;
-        }
-
-        const result = checkDestructive(command);
-        if (result.blocked) {
-          if (config.mode === "permissive") {
-            console.error(
-              `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
-                `Reason: ${result.reason}\n` +
-                `Suggestion: ${result.suggestion}`
-            );
-            logAudit(command, { ...result, blocked: false }, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "warn" });
-            continue;
-          }
-          if (config.mode === "interactive") {
-            const confirmed = await promptConfirmation(command, result.reason);
-            if (confirmed) {
-              logAudit(command, { ...result, blocked: false }, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "approved" });
-              if (process.stderr.isTTY) {
-                console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
-              } else {
-                console.error("Approved. Command will execute.");
-              }
-              continue;
-            }
-          }
-
-          logAudit(command, result, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "blocked" });
-          showBlockedMessage(result.reason, result.suggestion);
-          process.exit(2);
-        }
-
-        logAudit(command, result, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "allowed" });
-      }
-
-      process.exit(0);
-    } catch (error) {
-      if (process.env.DEBUG) console.error(error);
-      process.exit(0);
-    }
-  }
-
-  if (args.includes("--check")) {
-    const cmdIdx = args.indexOf("--check");
-    const command = args[cmdIdx + 1];
-    if (!command) process.exit(0);
-
-    if (hasBypassPrefix(command)) {
-      process.exit(0);
-    }
-
-    const result = checkDestructive(command);
-    if (result.blocked) {
-      if (config.mode === "permissive") {
-        console.error(
-          `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
-            `Reason: ${result.reason}\n` +
-            `Suggestion: ${result.suggestion}`
-        );
-        logAudit(command, { ...result, blocked: false }, { source: "check", mode: config.mode, threshold: config.threshold, decision: "warn" });
-        process.exit(0);
-      }
-      if (config.mode === "interactive") {
-        const confirmed = await promptConfirmation(command, result.reason);
-         if (confirmed) {
-            logAudit(command, { ...result, blocked: false }, { source: "check", mode: config.mode, threshold: config.threshold, decision: "approved" });
-            if (process.stderr.isTTY) {
-              console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
-            } else {
-              console.error("Approved. Command will execute.");
-            }
-            process.exit(0);
-         }
-      }
-
-      logAudit(command, result, { source: "check", mode: config.mode, threshold: config.threshold, decision: "blocked" });
-      showBlockedMessage(result.reason, result.suggestion);
-      process.exit(2);
-    }
-    logAudit(command, result, { source: "check", mode: config.mode, threshold: config.threshold, decision: "allowed" });
-    process.exit(0);
-  }
-
+async function handleStdin(config: any): Promise<void> {
   try {
     const input = await Bun.stdin.text();
     if (!input) process.exit(0);
@@ -491,15 +471,15 @@ fi
 
       if (config.mode === "interactive") {
         const confirmed = await promptConfirmation(command, result.reason);
-         if (confirmed) {
-            logAudit(command, { ...result, blocked: false }, { source: "stdin", mode: config.mode, threshold: config.threshold, decision: "approved" });
-            if (process.stderr.isTTY) {
-              console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
-            } else {
-              console.error("Approved. Command will execute.");
-            }
-            process.exit(0);
-         }
+        if (confirmed) {
+          logAudit(command, { ...result, blocked: false }, { source: "stdin", mode: config.mode, threshold: config.threshold, decision: "approved" });
+          if (process.stderr.isTTY) {
+            console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
+          } else {
+            console.error("Approved. Command will execute.");
+          }
+          process.exit(0);
+        }
       }
 
       logAudit(command, result, { source: "stdin", mode: config.mode, threshold: config.threshold, decision: "blocked" });
@@ -513,6 +493,47 @@ fi
     if (process.env.DEBUG) console.error(error);
     process.exit(0);
   }
+}
+
+export async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const config = getConfiguration();
+
+  if (process.env.SHELLSHIELD_SKIP === "1") {
+    process.exit(0);
+  }
+
+  if (args.includes("--init")) {
+    handleInit();
+  }
+
+  if (args.includes("--stats")) {
+    printStats();
+    process.exit(0);
+  }
+
+  if (args.includes("--doctor")) {
+    printDoctor();
+    process.exit(0);
+  }
+
+  if (args.includes("--score")) {
+    handleScore(args, config);
+  }
+
+  if (args.includes("--snapshot")) {
+    handleSnapshot(args, config);
+  }
+
+  if (args.includes("--paste")) {
+    await handlePaste(config);
+  }
+
+  if (args.includes("--check")) {
+    await handleCheck(args, config);
+  }
+
+  await handleStdin(config);
 }
 
 

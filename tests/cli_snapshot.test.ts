@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll } from "bun:test";
 import { spawn } from "bun";
-import { join } from "path";
+import { join } from "node:path";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "index.ts");
@@ -60,7 +60,7 @@ async function runCheck(command: string, env: Record<string, string> = {}, stdin
 }
 
 async function runCheckTty(command: string, env: Record<string, string>, stdin: string) {
-  const fullCmd = `${BUN_PATH} run "${CLI_PATH}" --check "${command.replace(/"/g, '\\"')}"`;
+  const fullCmd = `${BUN_PATH} run "${CLI_PATH}" --check "${command.replaceAll('"', '\\"')}"`;
   const proc = spawn({
     cmd: ["script", "-q", "-c", fullCmd, "/dev/null"],
     stdin: "pipe",

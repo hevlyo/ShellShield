@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync, mkdtempSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { checkDestructive } from "../src/parser/analyzer";
 import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "../src/constants";
 

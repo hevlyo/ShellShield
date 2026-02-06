@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "path";
-import { readFileSync } from "fs";
-import { createHash } from "crypto";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const INSTALLER = join(PROJECT_ROOT, "docs", "install.sh");

@@ -1,7 +1,7 @@
-import { appendFileSync, existsSync, mkdirSync, statSync, renameSync } from "fs";
-import { join } from "path";
-import { homedir, hostname } from "os";
-import { createHash } from "crypto";
+import { appendFileSync, existsSync, mkdirSync, statSync, renameSync } from "node:fs";
+import { join } from "node:path";
+import { homedir, hostname } from "node:os";
+import { createHash } from "node:crypto";
 import { BlockResult, Config } from "./types";
 
 export interface AuditMeta {

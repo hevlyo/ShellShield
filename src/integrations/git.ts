@@ -1,5 +1,5 @@
-import { execFileSync } from "child_process";
-import { basename, dirname } from "path";
+import { execFileSync } from "node:child_process";
+import { basename, dirname } from "node:path";
 
 export function hasUncommittedChanges(files: string[]): string[] {
   try {

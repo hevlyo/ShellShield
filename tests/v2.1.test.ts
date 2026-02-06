@@ -1,8 +1,8 @@
 import { describe, test, expect, afterAll } from "bun:test";
 import { spawn, spawnSync } from "bun";
-import { join } from "path";
-import { writeFileSync, rmSync, existsSync, mkdtempSync, readFileSync } from "fs";
-import { tmpdir } from "os";
+import { join } from "node:path";
+import { writeFileSync, rmSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const HOOK_PATH = join(PROJECT_ROOT, "src", "index.ts");
