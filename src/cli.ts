@@ -128,6 +128,38 @@ async function promptConfirmation(command: string, reason: string): Promise<bool
   });
 }
 
+async function checkAndAuditCommand(command: string, config: any, source: "check" | "paste" | "stdin"): Promise<boolean> {
+  const result = checkDestructive(command);
+  if (!result.blocked) {
+    logAudit(command, result, { source, mode: config.mode, threshold: config.threshold, decision: "allowed" });
+    return true;
+  }
+
+  if (config.mode === "permissive") {
+    console.error(
+      `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
+        `Reason: ${result.reason}\n` +
+        `Suggestion: ${result.suggestion}`
+    );
+    logAudit(command, { ...result, blocked: false }, { source, mode: config.mode, threshold: config.threshold, decision: "warn" });
+    return true;
+  }
+
+  if (config.mode === "interactive") {
+    const confirmed = await promptConfirmation(command, result.reason);
+    if (confirmed) {
+      logAudit(command, { ...result, blocked: false }, { source, mode: config.mode, threshold: config.threshold, decision: "approved" });
+      const msg = "Approved. Command will execute.";
+      console.error(process.stderr.isTTY ? `\x1b[32m${msg}\x1b[0m` : msg);
+      return true;
+    }
+  }
+
+  logAudit(command, result, { source, mode: config.mode, threshold: config.threshold, decision: "blocked" });
+  showBlockedMessage(result.reason, result.suggestion);
+  return false;
+}
+
 async function handleCheck(args: string[], config: any): Promise<void> {
   const cmdIdx = args.indexOf("--check");
   const command = args[cmdIdx + 1];
@@ -137,36 +169,8 @@ async function handleCheck(args: string[], config: any): Promise<void> {
     process.exit(0);
   }
 
-  const result = checkDestructive(command);
-  if (result.blocked) {
-    if (config.mode === "permissive") {
-      console.error(
-        `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
-          `Reason: ${result.reason}\n` +
-          `Suggestion: ${result.suggestion}`
-      );
-      logAudit(command, { ...result, blocked: false }, { source: "check", mode: config.mode, threshold: config.threshold, decision: "warn" });
-      process.exit(0);
-    }
-    if (config.mode === "interactive") {
-      const confirmed = await promptConfirmation(command, result.reason);
-      if (confirmed) {
-        logAudit(command, { ...result, blocked: false }, { source: "check", mode: config.mode, threshold: config.threshold, decision: "approved" });
-        if (process.stderr.isTTY) {
-          console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
-        } else {
-          console.error("Approved. Command will execute.");
-        }
-        process.exit(0);
-      }
-    }
-
-    logAudit(command, result, { source: "check", mode: config.mode, threshold: config.threshold, decision: "blocked" });
-    showBlockedMessage(result.reason, result.suggestion);
-    process.exit(2);
-  }
-  logAudit(command, result, { source: "check", mode: config.mode, threshold: config.threshold, decision: "allowed" });
-  process.exit(0);
+  const ok = await checkAndAuditCommand(command, config, "check");
+  process.exit(ok ? 0 : 2);
 }
 
 async function handlePaste(config: any): Promise<void> {
@@ -177,42 +181,10 @@ async function handlePaste(config: any): Promise<void> {
     const lines = input.split(/\r?\n/);
     for (const line of lines) {
       const command = line.trim();
-      if (!command) continue;
+      if (!command || hasBypassPrefix(command)) continue;
 
-      if (hasBypassPrefix(command)) {
-        continue;
-      }
-
-      const result = checkDestructive(command);
-      if (result.blocked) {
-        if (config.mode === "permissive") {
-          console.error(
-            `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
-              `Reason: ${result.reason}\n` +
-              `Suggestion: ${result.suggestion}`
-          );
-          logAudit(command, { ...result, blocked: false }, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "warn" });
-          continue;
-        }
-        if (config.mode === "interactive") {
-          const confirmed = await promptConfirmation(command, result.reason);
-          if (confirmed) {
-            logAudit(command, { ...result, blocked: false }, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "approved" });
-            if (process.stderr.isTTY) {
-              console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
-            } else {
-              console.error("Approved. Command will execute.");
-            }
-            continue;
-          }
-        }
-
-        logAudit(command, result, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "blocked" });
-        showBlockedMessage(result.reason, result.suggestion);
-        process.exit(2);
-      }
-
-      logAudit(command, result, { source: "paste", mode: config.mode, threshold: config.threshold, decision: "allowed" });
+      const ok = await checkAndAuditCommand(command, config, "paste");
+      if (!ok) process.exit(2);
     }
 
     process.exit(0);
@@ -448,47 +420,12 @@ async function handleStdin(config: any): Promise<void> {
       command = input.trim();
     }
 
-    if (!command) {
+    if (!command || hasBypassPrefix(command)) {
       process.exit(0);
     }
 
-    if (hasBypassPrefix(command)) {
-      process.exit(0);
-    }
-
-    const result = checkDestructive(command);
-
-    if (result.blocked) {
-      if (config.mode === "permissive") {
-        console.error(
-          `⚠️  ShellShield WARNING: Command would be blocked in enforce mode.\n` +
-            `Reason: ${result.reason}\n` +
-            `Suggestion: ${result.suggestion}`
-        );
-        logAudit(command, { ...result, blocked: false }, { source: "stdin", mode: config.mode, threshold: config.threshold, decision: "warn" });
-        process.exit(0);
-      }
-
-      if (config.mode === "interactive") {
-        const confirmed = await promptConfirmation(command, result.reason);
-        if (confirmed) {
-          logAudit(command, { ...result, blocked: false }, { source: "stdin", mode: config.mode, threshold: config.threshold, decision: "approved" });
-          if (process.stderr.isTTY) {
-            console.error("\x1b[32mApproved. Command will execute.\x1b[0m");
-          } else {
-            console.error("Approved. Command will execute.");
-          }
-          process.exit(0);
-        }
-      }
-
-      logAudit(command, result, { source: "stdin", mode: config.mode, threshold: config.threshold, decision: "blocked" });
-      showBlockedMessage(result.reason, result.suggestion);
-      process.exit(2);
-    }
-
-    logAudit(command, result, { source: "stdin", mode: config.mode, threshold: config.threshold, decision: "allowed" });
-    process.exit(0);
+    const ok = await checkAndAuditCommand(command, config, "stdin");
+    process.exit(ok ? 0 : 2);
   } catch (error) {
     if (process.env.DEBUG) console.error(error);
     process.exit(0);
