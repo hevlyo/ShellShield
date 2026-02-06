@@ -2,6 +2,7 @@ import { BlockResult } from "../types";
 import { isCriticalPath } from "../security/paths";
 import { hasUncommittedChanges } from "../integrations/git";
 import { ParsedEntry } from "./types";
+import { filterFlags, getTrashSuggestion, normalizeCommandName } from "./utils";
 
 interface BlockedContext {
   blocked: Set<string>;
@@ -60,7 +61,7 @@ export function checkBlockedCommand(
     }
   }
 
-  const targetFiles = args.filter((arg) => !arg.startsWith("-"));
+  const targetFiles = filterFlags(args);
   if (targetFiles.length > context.threshold) {
     return {
       blocked: true,
@@ -72,9 +73,9 @@ export function checkBlockedCommand(
   const gitCheck = checkGitIntegration(targetFiles);
   if (gitCheck) return gitCheck;
 
-  let suggestion = "trash <files>";
+  let suggestion = getTrashSuggestion([]);
   if (resolvedCmd === "rm" && targetFiles.length > 0) {
-    suggestion = `trash ${targetFiles.join(" ")}`;
+    suggestion = getTrashSuggestion(targetFiles);
   }
 
   return {
@@ -90,7 +91,7 @@ export function checkFindCommand(
 ): BlockResult | null {
   const hasDelete = remaining.some((entry) => typeof entry === "string" && entry.toLowerCase() === "-delete");
   if (hasDelete) {
-    return { blocked: true, reason: "find -delete detected", suggestion: "trash <files>" };
+    return { blocked: true, reason: "find -delete detected", suggestion: getTrashSuggestion([]) };
   }
 
   const execIdx = remaining.findIndex(
@@ -99,13 +100,12 @@ export function checkFindCommand(
   if (execIdx !== -1 && execIdx + 1 < remaining.length) {
     const execCmd = remaining[execIdx + 1];
     if (typeof execCmd === "string") {
-      const parts = execCmd.split("/");
-      const execName = (parts.pop() ?? "").toLowerCase();
+      const execName = normalizeCommandName(execCmd);
       if (blockedCommands.has(execName)) {
         return {
           blocked: true,
           reason: `find -exec ${execCmd} detected`,
-          suggestion: "trash <files>",
+          suggestion: getTrashSuggestion([]),
         };
       }
     }

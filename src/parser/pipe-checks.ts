@@ -2,6 +2,7 @@ import { SHELL_COMMANDS } from "../constants";
 import { isTrustedDomain } from "../security/validators";
 import { BlockResult } from "../types";
 import { ParsedEntry, isOperator } from "./types";
+import { normalizeCommandName } from "./utils";
 
 const INSECURE_FLAGS = new Set(["-k", "--insecure", "--no-check-certificate"]);
 
@@ -11,12 +12,19 @@ export function checkPipeToShell(
   trustedDomains: string[]
 ): BlockResult | null {
   for (const arg of args) {
-    if (/^https?:\/\/[^/]+:[^/]+@/.test(arg)) {
-      return {
-        blocked: true,
-        reason: "CREDENTIAL EXPOSURE DETECTED",
-        suggestion: "Commands should not include credentials in URLs. Use environment variables or netrc.",
-      };
+    if (arg.includes("://") && arg.includes("@")) {
+      try {
+        const urlObj = new URL(arg);
+        if (urlObj.username || urlObj.password) {
+          return {
+            blocked: true,
+            reason: "CREDENTIAL EXPOSURE DETECTED",
+            suggestion: "Commands should not include credentials in URLs. Use environment variables or netrc.",
+          };
+        }
+      } catch {
+        continue;
+      }
     }
   }
 
@@ -28,7 +36,7 @@ export function checkPipeToShell(
   const nextPart = remaining[pipeIdx + 1];
   if (typeof nextPart !== "string") return null;
 
-  const nextCmd = nextPart.split("/").pop()?.toLowerCase() ?? "";
+  const nextCmd = normalizeCommandName(nextPart);
   if (!SHELL_COMMANDS.has(nextCmd)) return null;
 
   const url = args.find((arg) => arg.startsWith("http"));

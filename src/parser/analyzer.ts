@@ -73,9 +73,10 @@ export function checkDestructive(
   };
 
   for (const rule of rules) {
-    if (rule.phase !== "pre") continue;
-    const result = annotateRule(rule.name, rule.check(stringContext));
-    if (result?.blocked) return result;
+    if (rule.phase === "pre") {
+      const result = annotateRule(rule.name, rule.check(stringContext));
+      if (result?.blocked) return result;
+    }
   }
 
   // 2. Parse Command
@@ -102,9 +103,10 @@ export function checkDestructive(
   };
 
   for (const rule of rules) {
-    if (rule.phase !== "post") continue;
-    const result = annotateRule(rule.name, rule.check(fullContext));
-    if (result?.blocked) return result;
+    if (rule.phase === "post") {
+      const result = annotateRule(rule.name, rule.check(fullContext));
+      if (result?.blocked) return result;
+    }
   }
 
   return { blocked: false };
