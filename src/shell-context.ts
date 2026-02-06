@@ -131,7 +131,8 @@ export function findBlockedTokenInShellContext(
 ): string | null {
   const haystack = `${entry.expansion ?? ""}\n${entry.output}`;
   for (const b of blocked) {
-    const re = new RegExp(`\\b${escapeRegExp(b)}\\b`, "i");
+    const pattern = String.raw`\b${escapeRegExp(b)}\b`;
+    const re = new RegExp(pattern, "i");
     if (re.test(haystack)) return b;
   }
   return null;

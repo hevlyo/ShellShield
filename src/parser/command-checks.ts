@@ -8,6 +8,18 @@ interface BlockedContext {
   threshold: number;
 }
 
+function checkGitIntegration(targetFiles: string[]): BlockResult | null {
+  const uncommitted = hasUncommittedChanges(targetFiles);
+  if (uncommitted.length > 0) {
+    return {
+      blocked: true,
+      reason: "UNCOMMITTED CHANGES DETECTED",
+      suggestion: `Commit changes to these files first: ${uncommitted.join(", ")}`,
+    };
+  }
+  return null;
+}
+
 export function checkBlockedCommand(
   resolvedCmd: string,
   args: string[],
@@ -57,14 +69,8 @@ export function checkBlockedCommand(
     };
   }
 
-  const uncommitted = hasUncommittedChanges(targetFiles);
-  if (uncommitted.length > 0) {
-    return {
-      blocked: true,
-      reason: "UNCOMMITTED CHANGES DETECTED",
-      suggestion: `Commit changes to these files first: ${uncommitted.join(", ")}`,
-    };
-  }
+  const gitCheck = checkGitIntegration(targetFiles);
+  if (gitCheck) return gitCheck;
 
   let suggestion = "trash <files>";
   if (resolvedCmd === "rm" && targetFiles.length > 0) {
@@ -82,7 +88,8 @@ export function checkFindCommand(
   remaining: ParsedEntry[],
   blockedCommands: Set<string>
 ): BlockResult | null {
-  if (remaining.some((entry) => typeof entry === "string" && entry.toLowerCase() === "-delete")) {
+  const hasDelete = remaining.some((entry) => typeof entry === "string" && entry.toLowerCase() === "-delete");
+  if (hasDelete) {
     return { blocked: true, reason: "find -delete detected", suggestion: "trash <files>" };
   }
 
@@ -92,7 +99,8 @@ export function checkFindCommand(
   if (execIdx !== -1 && execIdx + 1 < remaining.length) {
     const execCmd = remaining[execIdx + 1];
     if (typeof execCmd === "string") {
-      const execName = execCmd.split("/").pop()?.toLowerCase() ?? "";
+      const parts = execCmd.split("/");
+      const execName = (parts.pop() ?? "").toLowerCase();
       if (blockedCommands.has(execName)) {
         return {
           blocked: true,

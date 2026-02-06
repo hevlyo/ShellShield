@@ -58,7 +58,7 @@ export class CoreAstRule implements SecurityRule {
     return null;
   }
 
-  private checkProcessSubstitution(normalizedEntry: string, tokens: ParsedEntry[], i: number): BlockResult | null {
+  private checkBashSubshells(normalizedEntry: string, tokens: ParsedEntry[], i: number): BlockResult | null {
     if (normalizedEntry === "bash" || normalizedEntry === "sh" || normalizedEntry === "zsh") {
       const remaining = tokens.slice(i + 1);
       const hasSubstitution = remaining.some(
@@ -78,6 +78,27 @@ export class CoreAstRule implements SecurityRule {
       }
     }
     return null;
+  }
+
+  private resolveCmdName(entry: string, vars: Record<string, string>): string {
+    const basenamePart = entry.split("/").pop() ?? "";
+    const cmdName = entry.startsWith("\\") ? entry.slice(1) : basenamePart;
+
+    const resolvedVar = this.resolveVarToken(cmdName, vars);
+    if (resolvedVar) {
+      return resolvedVar.split("/").pop()?.toLowerCase() ?? "";
+    }
+    return cmdName.toLowerCase();
+  }
+
+  private checkGitRm(normalizedEntry: string, tokens: ParsedEntry[], i: number): number {
+    if (normalizedEntry === "git" && i + 1 < tokens.length) {
+      const next = tokens[i + 1];
+      if (typeof next === "string" && next.toLowerCase() === "rm") {
+        return i + 1;
+      }
+    }
+    return i;
   }
 
   private checkShellContext(resolvedCmd: string, config: any): BlockResult | null {
@@ -122,9 +143,7 @@ export class CoreAstRule implements SecurityRule {
         continue;
       }
 
-      if (typeof entry !== "string") {
-        continue;
-      }
+      if (typeof entry !== "string") continue;
 
       if (!nextMustBeCommand) {
         this.checkEnvironmentVariable(entry, vars);
@@ -134,18 +153,16 @@ export class CoreAstRule implements SecurityRule {
       }
 
       nextMustBeCommand = false;
-
       if (this.checkEnvironmentVariable(entry, vars)) {
         nextMustBeCommand = true;
         continue;
       }
 
       const normalizedEntry = entry.toLowerCase();
-
       const curlCheck = this.checkCurlWget(normalizedEntry, tokens, i, config);
       if (curlCheck) return curlCheck;
 
-      const subCheck = this.checkProcessSubstitution(normalizedEntry, tokens, i);
+      const subCheck = this.checkBashSubshells(normalizedEntry, tokens, i);
       if (subCheck) return subCheck;
 
       if (["sudo", "xargs", "command", "env"].includes(normalizedEntry)) {
@@ -153,32 +170,19 @@ export class CoreAstRule implements SecurityRule {
         continue;
       }
 
-      if (normalizedEntry === "git" && i + 1 < tokens.length) {
-        const next = tokens[i + 1];
-        if (typeof next === "string" && next.toLowerCase() === "rm") {
-          i++;
-          continue;
-        }
-      }
-
-      const basenamePart = entry.split("/").pop() ?? "";
-      const cmdName = entry.startsWith("\\") ? entry.slice(1) : basenamePart;
-
-      let resolvedCmd = cmdName.toLowerCase();
-      const resolvedVar = this.resolveVarToken(cmdName, vars);
-      if (resolvedVar) {
-        resolvedCmd = resolvedVar.split("/").pop()?.toLowerCase() ?? "";
-      }
-
-      const ctxCheck = this.checkShellContext(resolvedCmd, config);
-      if (ctxCheck) return ctxCheck;
-
-      if (config.allowed.has(resolvedCmd)) {
+      const nextI = this.checkGitRm(normalizedEntry, tokens, i);
+      if (nextI !== i) {
+        i = nextI;
         continue;
       }
 
-      const args = tokens.slice(i + 1).filter((item) => typeof item === "string") as string[];
+      const resolvedCmd = this.resolveCmdName(entry, vars);
+      const ctxCheck = this.checkShellContext(resolvedCmd, config);
+      if (ctxCheck) return ctxCheck;
 
+      if (config.allowed.has(resolvedCmd)) continue;
+
+      const args = tokens.slice(i + 1).filter((item) => typeof item === "string") as string[];
       const blockedCheck = checkBlockedCommand(resolvedCmd, args, {
         blocked: config.blocked,
         threshold: config.threshold,

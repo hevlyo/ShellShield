@@ -32,15 +32,22 @@ function printDoctor(): void {
   const hasTrash = runProbe(["bash", "-lc", "command -v trash"]).ok;
   const hasGioTrash = runProbe(["bash", "-lc", "command -v gio"]).ok;
 
-  console.log("ShellShield Doctor");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  const doctorHeader = "ShellShield Doctor";
+  const doctorSeparator = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+  console.log(doctorHeader);
+  console.log(doctorSeparator);
   console.log(`Shell: ${shell || "(unknown)"}`);
   console.log(`Mode: ${process.env.SHELLSHIELD_MODE || "(default)"}`);
   console.log("\nSafer delete command:");
-  if (hasTrashPut) console.log("- trash-put (recommended)");
-  else if (hasTrash) console.log("- trash");
-  else if (hasGioTrash) console.log("- gio trash");
-  else console.log("- (none found) install trash-cli or use gio trash");
+  if (hasTrashPut) {
+    console.log("- trash-put (recommended)");
+  } else if (hasTrash) {
+    console.log("- trash");
+  } else if (hasGioTrash) {
+    console.log("- gio trash");
+  } else {
+    console.log("- (none found) install trash-cli or use gio trash");
+  }
 
   if (shell) {
     const typeRm = runProbe(["bash", "-lc", `${shell} -ic 'type rm 2>/dev/null'`]).out;
@@ -116,13 +123,13 @@ async function promptConfirmation(command: string, reason: string): Promise<bool
   });
 
   return new Promise((resolve) => {
+    const promptMsg = String.raw`\n⚠️  ShellShield ALERT: ${reason}\n   Command: ${command}\n   Are you sure you want to execute this? [y/N] `;
     rl.question(
-      `\n⚠️  ShellShield ALERT: ${reason}\n` +
-      `   Command: ${command}\n` +
-      `   Are you sure you want to execute this? [y/N] `,
+      promptMsg,
       (answer) => {
         rl.close();
-        resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
+        const lower = answer.toLowerCase();
+        resolve(lower === "y" || lower === "yes");
       }
     );
   });
@@ -136,8 +143,9 @@ async function checkAndAuditCommand(command: string, config: any, source: "check
   }
 
   if (config?.mode === "permissive") {
+    const warningHeader = String.raw`⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.`;
     console.error(
-      `⚠️  ShellShield WARNING: Command '${command}' would be blocked in enforce mode.\n` +
+      `${warningHeader}\n` +
         `Reason: ${result.reason}\n` +
         `Suggestion: ${result.suggestion}`
     );
@@ -150,7 +158,8 @@ async function checkAndAuditCommand(command: string, config: any, source: "check
     if (confirmed) {
       logAudit(command, { ...result, blocked: false }, { source, mode: config?.mode, threshold: config?.threshold, decision: "approved" });
       const msg = "Approved. Command will execute.";
-      console.error(process.stderr.isTTY ? `\x1b[32m${msg}\x1b[0m` : msg);
+      const tty = process.stderr.isTTY;
+      console.error(tty ? String.raw`\x1b[32m${msg}\x1b[0m` : msg);
       return true;
     }
   }

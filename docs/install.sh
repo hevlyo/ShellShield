@@ -20,18 +20,22 @@ fi
 error() {
   echo -e "${Red}error${Color_Off}:" "$@" >&2
   exit 1
+  return 1
 }
 
 info() {
   echo -e "${Dim}$@ ${Color_Off}"
+  return 0
 }
 
 info_bold() {
   echo -e "${Bold_White}$@ ${Color_Off}"
+  return 0
 }
 
 success() {
   echo -e "${Green}$@ ${Color_Off}"
+  return 0
 }
 
 echo -e "${Bold_White}"
@@ -42,10 +46,10 @@ echo -e "${Color_Off}"
 verify_checksum() {
   local script_path="$1"
   local expected="${SHELLSHIELD_INSTALL_SHA256:-}"
-  if [ -z "$expected" ]; then
+  if [[ -z "$expected" ]]; then
     error "Missing SHELLSHIELD_INSTALL_SHA256. Get the checksum from the README and retry."
   fi
-  if [ -z "$script_path" ] || [ ! -f "$script_path" ]; then
+  if [[ -z "$script_path" ]] || [[ ! -f "$script_path" ]]; then
     error "Installer must be run from a file to verify checksum. Download it first."
   fi
 
@@ -77,11 +81,11 @@ success "✅ Dependencies found."
 INSTALL_DIR="$HOME/.shellshield"
 info "Installing to ${INSTALL_DIR}..."
 
-if [ -d "$INSTALL_DIR/.git" ]; then
+if [[ -d "$INSTALL_DIR/.git" ]]; then
   info "Updating existing installation..."
   git -C "$INSTALL_DIR" fetch --quiet
   git -C "$INSTALL_DIR" reset --hard origin/main --quiet
-elif [ -d "$INSTALL_DIR" ]; then
+elif [[ -d "$INSTALL_DIR" ]]; then
   info "Directory exists but is not a git repo. Backing up..."
   mv "$INSTALL_DIR" "${INSTALL_DIR}.bak.$(date +%s)"
   git clone --depth 1 https://github.com/hevlyo/ShellShield.git "$INSTALL_DIR" --quiet
@@ -98,7 +102,7 @@ bun install --production --no-save --force 2>"$tmp_log"
 install_status=$?
 set -e
 
-if [ $install_status -ne 0 ]; then
+if [[ $install_status -ne 0 ]]; then
   if grep -q "lockfile had changes" "$tmp_log"; then
     error "bun lockfile is frozen. Update bun and retry (bun --version)."
   fi
@@ -118,7 +122,7 @@ case "$USER_SHELL" in
     PROFILE="$HOME/.zshrc"
     ;;
   bash)
-    if [ -f "$HOME/.bashrc" ]; then
+    if [[ -f "$HOME/.bashrc" ]]; then
       PROFILE="$HOME/.bashrc"
     else
       PROFILE="$HOME/.bash_profile"
@@ -134,13 +138,13 @@ HOOK_BEGIN="# ShellShield Hook"
 HOOK_END="# ShellShield Hook End"
 HOOK_SCRIPT="
 $HOOK_BEGIN
-if [ -f \"$HOME/.shellshield/src/index.ts\" ]; then
+if [[ -f \"$HOME/.shellshield/src/index.ts\" ]]; then
   eval \"\$(bun run \"$HOME/.shellshield/src/index.ts\" --init)\"
 fi
 $HOOK_END
 "
 
-if [ -f "$PROFILE" ]; then
+if [[ -f "$PROFILE" ]]; then
   if grep -q "$HOOK_BEGIN" "$PROFILE"; then
     tmp_profile=$(mktemp)
     awk -v begin="$HOOK_BEGIN" -v end="$HOOK_END" '

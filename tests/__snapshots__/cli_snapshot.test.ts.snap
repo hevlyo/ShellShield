@@ -13,7 +13,7 @@ ShellShield - Keeping your terminal safe.
 `;
 
 exports[`CLI output snapshots permissive warning 1`] = `
-"⚠️  ShellShield WARNING: Command 'rm -rf /tmp/test' would be blocked in enforce mode.
+"\\u26A0\\uFE0F  ShellShield WARNING: Command 'rm -rf /tmp/test' would be blocked in enforce mode.
 Reason: Destructive command 'rm' detected
 Suggestion: trash /tmp/test
 "
@@ -21,10 +21,7 @@ Suggestion: trash /tmp/test
 
 exports[`CLI output snapshots interactive approve/cancel messaging 1`] = `
 "n
-\x1B[1G\x1B[0J
-⚠️  ShellShield ALERT: Destructive command 'rm' detected
-   Command: rm -rf /tmp/test
-   Are you sure you want to execute this? [y/N] \x1B[49Gn
+\x1B[1G\x1B[0J\\n\\u26A0\\uFE0F  ShellShield ALERT: Destructive command 'rm' detected\\n   Command: rm -rf /tmp/test\\n   Are you sure you want to execute this? [y/N] \x1B[149Gn
 
 \x1B[0m\x1B[31m
 \x1B[31m🛡️ \x1B[0mShellShield \x1B[31mBLOCKED\x1B[0m: Destructive command 'rm' detected
@@ -39,11 +36,8 @@ exports[`CLI output snapshots interactive approve/cancel messaging 1`] = `
 
 exports[`CLI output snapshots interactive approve/cancel messaging 2`] = `
 "y
-\x1B[1G\x1B[0J
-⚠️  ShellShield ALERT: Destructive command 'rm' detected
-   Command: rm -rf /tmp/test
-   Are you sure you want to execute this? [y/N] \x1B[49Gy
+\x1B[1G\x1B[0J\\n\\u26A0\\uFE0F  ShellShield ALERT: Destructive command 'rm' detected\\n   Command: rm -rf /tmp/test\\n   Are you sure you want to execute this? [y/N] \x1B[149Gy
 
-\x1B[0m\x1B[31m\x1B[32mApproved. Command will execute.\x1B[0m\x1B[0m
+\x1B[0m\x1B[31m\\x1b[32mApproved. Command will execute.\\x1b[0m\x1B[0m
 "
 `;

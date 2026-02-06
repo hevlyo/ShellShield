@@ -30,12 +30,12 @@ export class RawThreatRule implements SecurityRule {
       suggestion: "Avoid eval with remote content. Download and review the script first.",
     },
     {
-      pattern: new RegExp(`(?:${this.interpreters.join("|")})\\s+(?:${this.commandFlags.join("|")})\\s+["']?\\$\\((curl|wget)\\b`, "i"),
+      pattern: new RegExp(String.raw`(?:${this.interpreters.join("|")})\s+(?:${this.commandFlags.join("|")})\s+["']?\$\((curl|wget)\b`, "i"),
       reason: "COMMAND SUBSTITUTION DETECTED",
       suggestion: "Executing remote scripts via command substitution is dangerous.",
     },
     {
-      pattern: new RegExp(`(?:${this.interpreters.join("|")})\\s+(?:${this.commandFlags.join("|")})\\s+["']?\`(curl|wget)\\b`, "i"),
+      pattern: new RegExp(String.raw`(?:${this.interpreters.join("|")})\s+(?:${this.commandFlags.join("|")})\s+["']?\`(curl|wget)\b`, "i"),
       reason: "COMMAND SUBSTITUTION DETECTED",
       suggestion: "Executing remote scripts via command substitution is dangerous.",
     },

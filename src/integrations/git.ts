@@ -9,8 +9,9 @@ function processGitStatusOutput(
   const pathspecToOriginal = new Map<string, string>();
   for (const entry of entries) {
     pathspecToOriginal.set(entry.pathspec, entry.original);
-    if (entry.pathspec.startsWith("./")) {
-      pathspecToOriginal.set(entry.pathspec.slice(2), entry.original);
+    const spec = entry.pathspec;
+    if (spec.startsWith("./")) {
+      pathspecToOriginal.set(spec.slice(2), entry.original);
     }
   }
 
