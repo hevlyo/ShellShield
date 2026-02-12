@@ -1,8 +1,14 @@
 import { TerminalInjectionResult } from "../types";
 
+const MAX_INPUT_LENGTH = 10000;
+
 export function hasHomograph(str: string): { detected: boolean; char?: string } {
-  const urls = str.match(/https?:\/\/[^\s"'`]+/g) || [];
-  const candidates = urls.length > 0 ? urls : str.match(/\b[^\s]+\.[^\s]+\b/g) || [];
+  if (str.length > MAX_INPUT_LENGTH) {
+    return { detected: false };
+  }
+
+  const urls = str.match(/https?:\/\/[^\s"'`]{0,2000}/g) || [];
+  const candidates = urls.length > 0 ? urls : str.match(/\b[^\s]{1,253}\.[^\s]{1,253}\b/g) || [];
 
   for (const token of candidates) {
     let host = "";

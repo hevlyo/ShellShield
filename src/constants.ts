@@ -1,4 +1,18 @@
-export const DEFAULT_BLOCKED = new Set(["rm", "shred", "unlink", "wipe", "srm"]);
+export const DEFAULT_BLOCKED = new Set([
+  // File deletion commands
+  "rm", "shred", "unlink", "wipe", "srm",
+  // Disk/partition manipulation commands
+  "mkfs", "mkfs.ext4", "mkfs.xfs", "mkfs.btrfs", "mkfs.ntfs", "mkfs.fat", "mkfs.vfat",
+  "fdisk", "parted", "gdisk", "cfdisk", "sfdisk",
+  "dd", "blkid", "wipefs", "badblocks",
+  // System modification commands
+  "systemctl", "init", "shutdown", "reboot", "poweroff", "halt",
+  "iptables", "ip6tables", "nft", "ufw",
+  // Privilege escalation
+  "su", "sudo", "doas", "pkexec",
+  // User/group management
+  "userdel", "groupdel", "passwd", "chpasswd",
+]);
 export const SHELL_COMMANDS = new Set([
   "sh",
   "bash",

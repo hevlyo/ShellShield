@@ -7,29 +7,19 @@ export function normalizeCommandName(token: string): string {
   return basenamePart.toLowerCase();
 }
 
-export function resolveVariable(token: string, vars: Record<string, string>): string | null {
-  if (!token) return null;
-  
-  let name = "";
-  let fallback = "";
+export function resolveVariable(token: string, vars: Record<string, string>): string {
+  if (!token) return "";
 
-  if (token.startsWith("${") && token.endsWith("}")) {
-    const inner = token.slice(2, -1);
-    const defaultIdx = inner.indexOf(":-");
-    name = defaultIdx >= 0 ? inner.slice(0, defaultIdx) : inner;
-    fallback = defaultIdx >= 0 ? inner.slice(defaultIdx + 2) : "";
-  } else if (token.startsWith("$")) {
-    const inner = token.slice(1);
-    const defaultIdx = inner.indexOf(":-");
-    name = defaultIdx >= 0 ? inner.slice(0, defaultIdx) : inner;
-    fallback = defaultIdx >= 0 ? inner.slice(defaultIdx + 2) : "";
-  } else {
-    return null;
-  }
+  return token.replace(/\$\{([^}:-]+)(?::-([^}]+))?\}|\$([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, braceName, fallback, simpleName) => {
+    const name = braceName || simpleName;
+    const val = vars[name] ?? process.env[name];
 
-  const val = vars[name] ?? process.env[name];
-  if (val && val.length > 0) return val;
-  return fallback.length > 0 ? fallback : null;
+    if (val !== undefined && val !== null) {
+      return val;
+    }
+
+    return fallback !== undefined ? fallback : match;
+  });
 }
 
 export function filterFlags(args: string[]): string[] {

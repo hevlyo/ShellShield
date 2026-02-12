@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { scoreUrlRisk } from "./security/validators";
 import { parse } from "shell-quote";
+import { isBypassEnabled, extractEnvVar } from "./utils/bypass";
 
 function runProbe(cmd: string[]): { ok: boolean; out: string } {
   try {
@@ -74,25 +75,8 @@ function parseCsvArg(value: string | undefined): string[] {
 function hasBypassPrefix(command: string): boolean {
   try {
     const tokens = parse(command) as Array<string | { op: string }>;
-    let bypass = false;
-
-    for (const token of tokens) {
-      if (typeof token !== "string") {
-        break;
-      }
-
-      if (token.includes("=")) {
-        const [key, value] = token.split("=", 2);
-        if (key === "SHELLSHIELD_SKIP" && value === "1") {
-          bypass = true;
-        }
-        continue;
-      }
-
-      break;
-    }
-
-    return bypass;
+    const skipValue = extractEnvVar(tokens, "SHELLSHIELD_SKIP");
+    return isBypassEnabled(skipValue);
   } catch {
     return false;
   }
@@ -319,7 +303,7 @@ export async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const config = getConfiguration();
 
-  if (process.env.SHELLSHIELD_SKIP === "1") {
+  if (isBypassEnabled(process.env.SHELLSHIELD_SKIP)) {
     process.exit(0);
   }
 

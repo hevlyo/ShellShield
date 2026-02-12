@@ -81,6 +81,7 @@ ShellShield is a high‑performance, intelligent shell hook that tokenizes every
 - **Transparent audit log**: records decisions to `~/.shellshield/audit.log`.
 - **Open ruleset**: all detection logic lives in `src/parser/rules/`.
 - **Extensive tests**: security and bypass cases covered in `tests/`.
+- **ReDoS Protection**: All regex patterns use bounded quantifiers and input validation to prevent catastrophic backtracking attacks.
 
 ---
 
@@ -89,6 +90,18 @@ ShellShield is a high‑performance, intelligent shell hook that tokenizes every
 If you believe you have found a security issue, please report it privately.
 Preferred: open a GitHub Security Advisory with clear reproduction steps and impact.
 If private reporting is not possible, open a GitHub issue without exploit details.
+
+### Regular Expression Safety (ReDoS Protection)
+
+ShellShield uses regex patterns for threat detection. To prevent Regular Expression Denial of Service (ReDoS) attacks:
+
+- **Input length limits**: All regex operations are limited to 10,000 character inputs
+- **Bounded quantifiers**: Patterns use `{0,10}` instead of `*` or `+` where possible
+- **Character class negation**: Uses `[^|]*` instead of `.*` to prevent backtracking
+- **Lazy quantifiers**: Uses `.*?` instead of `.*` where unbounded matching is necessary
+- **Performance testing**: All patterns are tested against malicious inputs
+
+See `src/security/patterns.ts` for implementation details and `tests/regex_security.test.ts` for security test cases.
 
 ---
 
@@ -279,9 +292,22 @@ ShellShield works out of the box. Create `.shellshield.json` to customize:
 ### Environment Variables
 - `SHELLSHIELD_THRESHOLD`: max files per delete (default: 50)
 - `SHELLSHIELD_MODE`: set `permissive` or `interactive`
-- `SHELLSHIELD_SKIP=1`: bypass checks for next command
+- `SHELLSHIELD_SKIP`: bypass checks for next command (values: `1`, `true`, `yes`, `on`, `enable`)
 - `SHELLSHIELD_MAX_SUBSHELL_DEPTH`: max nested `sh -c` analysis depth (default: 5)
 - Recommended: keep between `3` and `6` for low overhead; raise only if you rely on deep nested shells.
+
+#### Bypass Examples
+```bash
+# All of these work:
+SHELLSHIELD_SKIP=1 rm -rf /tmp/test
+SHELLSHIELD_SKIP=true rm -rf /tmp/test
+SHELLSHIELD_SKIP=yes rm -rf /tmp/test
+SHELLSHIELD_SKIP=on rm -rf /tmp/test
+
+# Or set globally (not recommended for daily use):
+export SHELLSHIELD_SKIP=1
+rm -rf /tmp/test
+```
 
 ### Shell Context (Aliases / Functions)
 

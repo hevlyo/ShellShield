@@ -49,6 +49,21 @@ export function checkBlockedCommand(
     }
   }
 
+  if (resolvedCmd === "chmod" || resolvedCmd === "chown" || resolvedCmd === "chgrp") {
+    const hasRecursive = args.some((arg) => arg === "-R" || arg === "--recursive");
+    if (hasRecursive) {
+      for (const arg of args) {
+        if (!arg.startsWith("-") && isCriticalPath(arg)) {
+          return {
+            blocked: true,
+            reason: "CRITICAL PATH TARGETED",
+            suggestion: `Recursive ${resolvedCmd} on critical system path ${arg} is prohibited.`,
+          };
+        }
+      }
+    }
+  }
+
   if (!context.blocked.has(resolvedCmd)) return null;
 
   for (const arg of args) {
@@ -105,6 +120,41 @@ export function checkFindCommand(
         return {
           blocked: true,
           reason: `find -exec ${execCmd} detected`,
+          suggestion: getTrashSuggestion([]),
+        };
+      }
+    }
+  }
+
+  const execPlusIdx = remaining.findIndex(
+    (entry) => typeof entry === "string" && entry.toLowerCase() === "-execdir"
+  );
+  if (execPlusIdx !== -1 && execPlusIdx + 1 < remaining.length) {
+    const execCmd = remaining[execPlusIdx + 1];
+    if (typeof execCmd === "string") {
+      const execName = normalizeCommandName(execCmd);
+      if (blockedCommands.has(execName)) {
+        return {
+          blocked: true,
+          reason: `find -execdir ${execCmd} detected`,
+          suggestion: getTrashSuggestion([]),
+        };
+      }
+    }
+  }
+
+  const okIdx = remaining.findIndex(
+    (entry) => typeof entry === "string" && entry.toLowerCase() === "-ok"
+  );
+  if (okIdx !== -1 && okIdx + 1 < remaining.length) {
+    const execCmd = remaining[okIdx + 1];
+    if (typeof execCmd === "string") {
+      const execName = normalizeCommandName(execCmd);
+      const dangerousCommands = new Set([...blockedCommands, "rm", "shred", "dd", "mkfs"]);
+      if (dangerousCommands.has(execName)) {
+        return {
+          blocked: true,
+          reason: `find -ok ${execCmd} detected - dangerous command`,
           suggestion: getTrashSuggestion([]),
         };
       }

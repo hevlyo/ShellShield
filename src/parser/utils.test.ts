@@ -7,17 +7,19 @@ describe("Parser Utils", () => {
   });
 
   test("resolveVariable handles invalid format", () => {
-    expect(resolveVariable("NOT_A_VAR", {})).toBeNull();
-    expect(resolveVariable("$", {})).toBeNull();
-    expect(resolveVariable("${}", {})).toBeNull();
+    expect(resolveVariable("NOT_A_VAR", {})).toBe("NOT_A_VAR");
+    expect(resolveVariable("$", {})).toBe("$");
+    expect(resolveVariable("${}", {})).toBe("${}");
   });
 
   test("resolveVariable handles empty result", () => {
-    expect(resolveVariable("$EMPTY", { EMPTY: "" })).toBeNull();
+    expect(resolveVariable("$EMPTY", { EMPTY: "" })).toBe("");
   });
 
-  test("resolveVariable handles fallback with empty value", () => {
-    expect(resolveVariable("${UNDEFINED:-fallback}", {})).toBe("fallback");
+  test("resolveVariable handles partial expansion", () => {
+    expect(resolveVariable("/bin/$VAR", { VAR: "rm" })).toBe("/bin/rm");
+    expect(resolveVariable("${VAR:-default}/path", { VAR: "" })).toBe("default/path");
+    expect(resolveVariable("prefix_${VAR}", { VAR: "suffix" })).toBe("prefix_suffix");
   });
 
   test("filterFlags identifies flags correctly", () => {

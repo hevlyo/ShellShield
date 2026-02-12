@@ -50,12 +50,12 @@ export class CoreAstRule implements SecurityRule {
         continue;
       }
 
-      const normalizedEntry = entry.toLowerCase();
+      const normalizedEntry = normalizeCommandName(entry);
 
-      const curlCheck = this.checkCurlWget(normalizedEntry, tokens, i, config);
+      const curlCheck = this.handleCurlWget(normalizedEntry, tokens, i, config);
       if (curlCheck) return curlCheck;
 
-      const subCheck = this.checkBashSubshells(normalizedEntry, tokens, i);
+      const subCheck = this.handleBashSubshells(normalizedEntry, tokens, i);
       if (subCheck) return subCheck;
 
       if (this.isCommandPrefix(normalizedEntry)) {
@@ -81,7 +81,7 @@ export class CoreAstRule implements SecurityRule {
   private handleOperator(opEntry: { op: string }, nextEntry: ParsedEntry | undefined): BlockResult | null {
     if (opEntry.op === "<(") {
       if (typeof nextEntry === "string") {
-        const normalizedNext = normalizeCommandName(nextEntry);
+        const normalizedNext = normalizeCommandName(resolveVariable(nextEntry, {}));
         if (normalizedNext === "curl" || normalizedNext === "wget") {
           return {
             blocked: true,
@@ -158,7 +158,7 @@ export class CoreAstRule implements SecurityRule {
     return null;
   }
 
-  private checkCurlWget(normalizedEntry: string, tokens: ParsedEntry[], i: number, config: any): BlockResult | null {
+  private handleCurlWget(normalizedEntry: string, tokens: ParsedEntry[], i: number, config: any): BlockResult | null {
     if (normalizedEntry === "curl" || normalizedEntry === "wget") {
       const remaining = tokens.slice(i + 1);
       const args = remaining.filter((item) => typeof item === "string") as string[];
@@ -170,7 +170,7 @@ export class CoreAstRule implements SecurityRule {
     return null;
   }
 
-  private checkBashSubshells(normalizedEntry: string, tokens: ParsedEntry[], i: number): BlockResult | null {
+  private handleBashSubshells(normalizedEntry: string, tokens: ParsedEntry[], i: number): BlockResult | null {
     if (normalizedEntry === "bash" || normalizedEntry === "sh" || normalizedEntry === "zsh") {
       const remaining = tokens.slice(i + 1);
       const hasSubstitution = remaining.some(
@@ -193,12 +193,8 @@ export class CoreAstRule implements SecurityRule {
   }
 
   private resolveCmdName(entry: string, vars: Record<string, string>): string {
-    const name = normalizeCommandName(entry);
-    const resolvedVar = resolveVariable(entry, vars);
-    if (resolvedVar) {
-      return normalizeCommandName(resolvedVar);
-    }
-    return name;
+    const expanded = resolveVariable(entry, vars);
+    return normalizeCommandName(expanded);
   }
 
   private checkShellContext(resolvedCmd: string, config: any): BlockResult | null {
@@ -221,7 +217,7 @@ export class CoreAstRule implements SecurityRule {
   }
 
   private checkDownloadAndExec(remaining: ParsedEntry[], args: string[]): BlockResult | null {
-    const outputFlagIndex = args.findIndex(
+      const outputFlagIndex = args.findIndex(
         (arg) => arg === "-o" || arg === "--output"
       );
       if (outputFlagIndex === -1 || outputFlagIndex + 1 >= args.length) return null;
@@ -236,17 +232,38 @@ export class CoreAstRule implements SecurityRule {
     
       const nextCmd = remaining[opIdx + 1];
       const nextArg = remaining[opIdx + 2];
-      if (typeof nextCmd !== "string" || typeof nextArg !== "string") return null;
+      if (typeof nextCmd !== "string") return null;
     
-      const nextName = nextCmd.split("/").pop()?.toLowerCase() ?? "";
-      if (!SHELL_COMMANDS.has(nextName)) return null;
+      const nextName = normalizeCommandName(nextCmd);
+
+      const dangerousCommands = new Set([
+        ...SHELL_COMMANDS,
+        "python", "python3", "python2",
+        "perl", "ruby", "node", "bun", "php",
+        "source", ".", "chmod", "exec"
+      ]);
     
-      if (nextArg === outputPath) {
+      if (!dangerousCommands.has(nextName)) return null;
+    
+      if (typeof nextArg === "string" && nextArg === outputPath) {
         return {
           blocked: true,
           reason: "DOWNLOAD-AND-EXEC DETECTED",
           suggestion: "Downloading and executing a script in one command is dangerous. Review the script first.",
         };
+      }
+    
+      if (nextName === "bash" || nextName === "sh" || nextName === "zsh" || 
+          nextName === "python" || nextName === "python3" || nextName === "perl" ||
+          nextName === "ruby" || nextName === "node") {
+        const allArgs = remaining.slice(opIdx + 2).filter((e): e is string => typeof e === "string");
+        if (allArgs.some(arg => arg === outputPath || arg.includes(outputPath))) {
+          return {
+            blocked: true,
+            reason: "DOWNLOAD-AND-EXEC DETECTED",
+            suggestion: "Downloading and executing a script in one command is dangerous. Review the script first.",
+          };
+        }
       }
     
       return null;
