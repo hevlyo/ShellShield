@@ -1,3 +1,5 @@
+import { parse } from "shell-quote";
+
 const BYPASS_VALUES = new Set(["1", "true", "yes", "on", "enable", "enabled"]);
 
 export function isBypassEnabled(value: string | undefined): boolean {
@@ -23,4 +25,14 @@ export function extractEnvVar(
     break;
   }
   return undefined;
+}
+
+export function hasBypassPrefix(command: string): boolean {
+  try {
+    const tokens = parse(command) as Array<string | { op: string }>;
+    const skipValue = extractEnvVar(tokens, "SHELLSHIELD_SKIP");
+    return isBypassEnabled(skipValue);
+  } catch {
+    return false;
+  }
 }

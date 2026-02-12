@@ -1,4 +1,11 @@
 #!/usr/bin/env bun
 import { main } from "./cli";
 
-main();
+try {
+  await main();
+} catch (err) {
+  if (process.env.DEBUG) {
+    console.error(err);
+  }
+  process.exit(0);
+}

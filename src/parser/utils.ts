@@ -1,9 +1,8 @@
-import { ParsedEntry } from "./types";
-
 export function normalizeCommandName(token: string): string {
   if (!token) return "";
   const stripped = token.startsWith("\\") ? token.slice(1) : token;
-  const basenamePart = stripped.split("/").pop() ?? "";
+  const normalized = stripped.replaceAll("\\", "/");
+  const basenamePart = normalized.split("/").pop() ?? "";
   return basenamePart.toLowerCase();
 }
 
@@ -14,11 +13,20 @@ export function resolveVariable(token: string, vars: Record<string, string>): st
     const name = braceName || simpleName;
     const val = vars[name] ?? process.env[name];
 
+    // If using :- operator, treat empty string as unset and use fallback
+    if (fallback !== undefined) {
+      if (val && val.length > 0) {
+        return val;
+      }
+      return fallback;
+    }
+
+    // Without :- operator, return value if defined (even if empty)
     if (val !== undefined && val !== null) {
       return val;
     }
 
-    return fallback !== undefined ? fallback : match;
+    return match;
   });
 }
 

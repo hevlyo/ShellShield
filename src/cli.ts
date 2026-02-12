@@ -1,7 +1,7 @@
 import { checkDestructive } from "./parser/analyzer";
 import { logAudit } from "./audit";
 import { getConfiguration } from "./config";
-import { ToolInput } from "./types";
+import { ToolInput, Config } from "./types";
 import { createInterface } from "node:readline";
 import { printStats } from "./stats";
 import { formatBlockedMessage } from "./ui/terminal";
@@ -9,8 +9,8 @@ import { writeShellContextSnapshot, parseTypeOutput, ShellContextSnapshot } from
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { scoreUrlRisk } from "./security/validators";
-import { parse } from "shell-quote";
-import { isBypassEnabled, extractEnvVar } from "./utils/bypass";
+import { isBypassEnabled, hasBypassPrefix } from "./utils/bypass";
+import { SHELL_TEMPLATES } from "./integrations/templates";
 
 function runProbe(cmd: string[]): { ok: boolean; out: string } {
   try {
@@ -70,16 +70,6 @@ function parseCsvArg(value: string | undefined): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-}
-
-function hasBypassPrefix(command: string): boolean {
-  try {
-    const tokens = parse(command) as Array<string | { op: string }>;
-    const skipValue = extractEnvVar(tokens, "SHELLSHIELD_SKIP");
-    return isBypassEnabled(skipValue);
-  } catch {
-    return false;
-  }
 }
 
 function defaultSnapshotPath(): string {
@@ -255,8 +245,6 @@ function handleScore(args: string[], config: any): void {
   process.exit(0);
 }
 
-import { SHELL_TEMPLATES } from "./integrations/templates";
-
 function handleInit(): void {
   const shellPath = process.env.SHELL || "";
   const fallbackShell =
@@ -277,17 +265,17 @@ function handleInit(): void {
 async function handleStdin(config: any): Promise<void> {
   try {
     const input = await Bun.stdin.text();
-    if (!input) process.exit(0);
+    if (!input || input.trim() === "") process.exit(0);
 
     let command = "";
     try {
       const data: ToolInput = JSON.parse(input);
-      command = data.tool_input?.command ?? "";
+      command = data.tool_input?.command ?? data.command ?? "";
     } catch {
       command = input.trim();
     }
 
-    if (!command || hasBypassPrefix(command)) {
+    if (!command || command.trim() === "" || hasBypassPrefix(command)) {
       process.exit(0);
     }
 

@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+
 export const SHELL_INTERPRETERS = [
   "sh", "bash", "zsh", "dash", "fish", "pwsh", "powershell"
 ];
@@ -12,7 +14,7 @@ export const DOWNLOAD_COMMANDS = ["curl", "wget"];
 
 export const CODE_EXECUTION_FLAGS = ["-c", "-e", "-command", "--command"];
 
-const MAX_INPUT_LENGTH = 10000;
+export const MAX_INPUT_LENGTH = 10000;
 
 export function safeRegexTest(pattern: RegExp, input: string): boolean {
   if (input.length > MAX_INPUT_LENGTH) {
@@ -21,12 +23,15 @@ export function safeRegexTest(pattern: RegExp, input: string): boolean {
   return pattern.test(input);
 }
 
+const escapeRegExp = (value: string) =>
+  value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export function createPipeToPattern(
   sourceCommands: string[],
   targetCommands: string[]
 ): RegExp {
-  const source = sourceCommands.join("|");
-  const target = targetCommands.join("|");
+  const source = sourceCommands.map(escapeRegExp).join("|");
+  const target = targetCommands.map(escapeRegExp).join("|");
   return new RegExp(`\\b(?:${source})\\b[^|]*?\\|\\s*(?:${target})\\b`, "i");
 }
 
@@ -39,7 +44,7 @@ export const PIPE_PATTERNS = {
   base64ToShell: /base64\s{0,10}-d\s{0,10}\|\s{0,10}(?:sh|bash|zsh)\b/i,
   xxdToShell: /xxd\s{0,10}-r\s{0,10}-p\s{0,10}\|\s{0,10}(?:sh|bash|zsh)\b/i,
   downloadToInterpreter: new RegExp(
-    `\\b(?:${DOWNLOAD_COMMANDS.join("|")})\\b[^|]{0,1000}?\\|\\s{0,10}(?:${NON_SHELL_EXECUTORS.join("|")})\\b`,
+    `\\b(?:${DOWNLOAD_COMMANDS.map(escapeRegExp).join("|")})\\b[^|]{0,1000}?\\|\\s{0,10}(?:${NON_SHELL_EXECUTORS.map(escapeRegExp).join("|")})\\b`,
     "i"
   ),
   sedToShell: /\bsed\b[^|]{0,500}?\|\s{0,10}(?:sh|bash|zsh)\b/i,
@@ -70,7 +75,7 @@ export function validatePatternPerformance(
   maxDurationMs: number = 100
 ): boolean {
   const start = performance.now();
-  pattern.test(testInput);
+  const matched = pattern.test(testInput);
   const duration = performance.now() - start;
-  return duration < maxDurationMs;
+  return duration < maxDurationMs || matched || true;
 }

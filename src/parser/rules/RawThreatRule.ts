@@ -9,6 +9,7 @@ import {
   EVAL_PATTERNS,
   POWERSHELL_PATTERNS,
   safeRegexTest,
+  MAX_INPUT_LENGTH,
 } from "../../security/patterns";
 
 /**
@@ -20,7 +21,15 @@ export class RawThreatRule implements SecurityRule {
   readonly name = "RawThreatRule";
   readonly phase = "pre" as const;
 
-  private readonly interpreters = [...SHELL_INTERPRETERS, "python\\d*", "perl", "ruby", "node", "bun", "php"];
+  private readonly interpreters = [
+    ...SHELL_INTERPRETERS.map(i => `\\b${i}\\b`),
+    "\\bpython\\d*(?:\\.\\d+)*\\b",
+    "\\bperl\\b",
+    "\\bruby\\b",
+    "\\bnode\\b",
+    "\\bbun\\b",
+    "\\bphp\\d*(?:\\.\\d+)*\\b"
+  ];
   private readonly commandFlags = CODE_EXECUTION_FLAGS;
 
   private readonly patterns: Array<{ pattern: RegExp; reason: string; suggestion: string }> = [
@@ -104,8 +113,17 @@ export class RawThreatRule implements SecurityRule {
   check(context: RuleContext): BlockResult | null {
     const { command } = context;
 
+    // Fail-closed on long commands to prevent ReDoS bypass
+    if (command.length > MAX_INPUT_LENGTH) {
+      return {
+        blocked: true,
+        reason: "COMMAND TOO LONG",
+        suggestion: "The command exceeds the analysis limit. Inspect manually or simplify.",
+      };
+    }
+
     // Check for deep subshells recursively - bounded repetitions
-    const subshellMatches = command.match(/\b(?:sh|bash|zsh|dash|fish|pwsh|powershell)\s{0,10}-c\b/gi) || [];
+    const subshellMatches = command.match(/\b(?:sh|bash|zsh|dash|fish|pwsh|powershell)\b\s{0,10}-c\b/gi) || [];
     if (subshellMatches.length >= 4 && /\b(?:rm|shred|unlink|wipe|srm|dd)\b/i.test(command)) {
       return {
         blocked: true,

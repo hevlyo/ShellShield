@@ -6,11 +6,7 @@ import { normalizeCommandName } from "./utils";
 
 const INSECURE_FLAGS = new Set(["-k", "--insecure", "--no-check-certificate"]);
 
-export function checkPipeToShell(
-  args: string[],
-  remaining: ParsedEntry[],
-  trustedDomains: string[]
-): BlockResult | null {
+function checkUrlCredentials(args: string[]): BlockResult | null {
   for (const arg of args) {
     if (arg.includes("://") && arg.includes("@")) {
       try {
@@ -27,6 +23,35 @@ export function checkPipeToShell(
       }
     }
   }
+  return null;
+}
+
+function checkTransportSecurity(args: string[]): BlockResult | null {
+  if (args.some((arg) => arg.startsWith("http://"))) {
+    return {
+      blocked: true,
+      reason: "INSECURE TRANSPORT DETECTED",
+      suggestion: "Piping plain HTTP content to a shell is dangerous. Use HTTPS.",
+    };
+  }
+
+  if (args.some((arg) => INSECURE_FLAGS.has(arg))) {
+    return {
+      blocked: true,
+      reason: "INSECURE TRANSPORT DETECTED",
+      suggestion: "Piping to a shell with certificate validation disabled is extremely dangerous.",
+    };
+  }
+  return null;
+}
+
+export function checkPipeToShell(
+  args: string[],
+  remaining: ParsedEntry[],
+  trustedDomains: string[]
+): BlockResult | null {
+  const credentialCheck = checkUrlCredentials(args);
+  if (credentialCheck) return credentialCheck;
 
   const pipeIdx = remaining.findIndex(
     (entry) => isOperator(entry) && entry.op === "|"
@@ -44,21 +69,8 @@ export function checkPipeToShell(
     return null;
   }
 
-  if (args.some((arg) => arg.startsWith("http://"))) {
-    return {
-      blocked: true,
-      reason: "INSECURE TRANSPORT DETECTED",
-      suggestion: "Piping plain HTTP content to a shell is dangerous. Use HTTPS.",
-    };
-  }
-
-  if (args.some((arg) => INSECURE_FLAGS.has(arg))) {
-    return {
-      blocked: true,
-      reason: "INSECURE TRANSPORT DETECTED",
-      suggestion: "Piping to a shell with certificate validation disabled is extremely dangerous.",
-    };
-  }
+  const transportCheck = checkTransportSecurity(args);
+  if (transportCheck) return transportCheck;
 
   return {
     blocked: true,

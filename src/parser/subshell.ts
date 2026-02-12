@@ -2,10 +2,8 @@ import { BlockResult } from "../types";
 import { ParsedEntry } from "./types";
 
 const SHELL_FLAGS = new Set([
-  "-c", "-command",
-  "-e", "-exec",
-  "-x",
-  "-o", "--output",
+  "-c", "--command", "-command",
+  "-C", "--init-command", "-init-command",
 ]);
 
 export function checkSubshellCommand(

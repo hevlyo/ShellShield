@@ -1,8 +1,11 @@
 import { BlockResult } from "../types";
 import { isCriticalPath } from "../security/paths";
 import { hasUncommittedChanges } from "../integrations/git";
+import { SYSTEMCTL_DESTRUCTIVE_SUBCOMMANDS } from "../constants";
 import { ParsedEntry } from "./types";
 import { filterFlags, getTrashSuggestion, normalizeCommandName } from "./utils";
+
+const ADDITIONAL_DANGEROUS_COMMANDS = new Set(["rm", "shred", "dd", "mkfs"]);
 
 interface BlockedContext {
   blocked: Set<string>;
@@ -50,7 +53,11 @@ export function checkBlockedCommand(
   }
 
   if (resolvedCmd === "chmod" || resolvedCmd === "chown" || resolvedCmd === "chgrp") {
-    const hasRecursive = args.some((arg) => arg === "-R" || arg === "--recursive");
+    const hasRecursive = args.some((arg) =>
+      arg === "-R" ||
+      arg === "--recursive" ||
+      (arg.startsWith("-") && !arg.startsWith("--") && arg.includes("R"))
+    );
     if (hasRecursive) {
       for (const arg of args) {
         if (!arg.startsWith("-") && isCriticalPath(arg)) {
@@ -62,6 +69,18 @@ export function checkBlockedCommand(
         }
       }
     }
+  }
+
+  if (resolvedCmd === "systemctl") {
+    const subcommand = args.find((arg) => !arg.startsWith("-"));
+    if (subcommand && SYSTEMCTL_DESTRUCTIVE_SUBCOMMANDS.has(subcommand.toLowerCase())) {
+      return {
+        blocked: true,
+        reason: `Destructive systemctl ${subcommand} detected`,
+        suggestion: `systemctl ${subcommand} can disrupt system services. Review before running.`,
+      };
+    }
+    return null;
   }
 
   if (!context.blocked.has(resolvedCmd)) return null;
@@ -100,61 +119,33 @@ export function checkBlockedCommand(
   };
 }
 
+function isDangerousExec(execCmd: ParsedEntry, dangerousCommands: Set<string>): boolean {
+  if (typeof execCmd !== "string") return false;
+  const execName = normalizeCommandName(execCmd);
+  return dangerousCommands.has(execName);
+}
+
 export function checkFindCommand(
   remaining: ParsedEntry[],
   blockedCommands: Set<string>
 ): BlockResult | null {
-  const hasDelete = remaining.some((entry) => typeof entry === "string" && entry.toLowerCase() === "-delete");
-  if (hasDelete) {
+  const dangerousCommands = new Set([...blockedCommands, ...ADDITIONAL_DANGEROUS_COMMANDS]);
+  
+  if (remaining.some((entry) => typeof entry === "string" && entry.toLowerCase() === "-delete")) {
     return { blocked: true, reason: "find -delete detected", suggestion: getTrashSuggestion([]) };
   }
 
-  const execIdx = remaining.findIndex(
-    (entry) => typeof entry === "string" && entry.toLowerCase() === "-exec"
-  );
-  if (execIdx !== -1 && execIdx + 1 < remaining.length) {
-    const execCmd = remaining[execIdx + 1];
-    if (typeof execCmd === "string") {
-      const execName = normalizeCommandName(execCmd);
-      if (blockedCommands.has(execName)) {
+  const findFlags = ["-exec", "-execdir", "-ok"];
+  for (const flag of findFlags) {
+    const idx = remaining.findIndex(
+      (entry) => typeof entry === "string" && entry.toLowerCase() === flag
+    );
+    if (idx !== -1 && idx + 1 < remaining.length) {
+      const execCmd = remaining[idx + 1];
+      if (isDangerousExec(execCmd, dangerousCommands)) {
         return {
           blocked: true,
-          reason: `find -exec ${execCmd} detected`,
-          suggestion: getTrashSuggestion([]),
-        };
-      }
-    }
-  }
-
-  const execPlusIdx = remaining.findIndex(
-    (entry) => typeof entry === "string" && entry.toLowerCase() === "-execdir"
-  );
-  if (execPlusIdx !== -1 && execPlusIdx + 1 < remaining.length) {
-    const execCmd = remaining[execPlusIdx + 1];
-    if (typeof execCmd === "string") {
-      const execName = normalizeCommandName(execCmd);
-      if (blockedCommands.has(execName)) {
-        return {
-          blocked: true,
-          reason: `find -execdir ${execCmd} detected`,
-          suggestion: getTrashSuggestion([]),
-        };
-      }
-    }
-  }
-
-  const okIdx = remaining.findIndex(
-    (entry) => typeof entry === "string" && entry.toLowerCase() === "-ok"
-  );
-  if (okIdx !== -1 && okIdx + 1 < remaining.length) {
-    const execCmd = remaining[okIdx + 1];
-    if (typeof execCmd === "string") {
-      const execName = normalizeCommandName(execCmd);
-      const dangerousCommands = new Set([...blockedCommands, "rm", "shred", "dd", "mkfs"]);
-      if (dangerousCommands.has(execName)) {
-        return {
-          blocked: true,
-          reason: `find -ok ${execCmd} detected - dangerous command`,
+          reason: `find ${flag} ${execCmd} detected${flag === "-ok" ? " - dangerous command" : ""}`,
           suggestion: getTrashSuggestion([]),
         };
       }

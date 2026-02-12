@@ -292,7 +292,7 @@ ShellShield works out of the box. Create `.shellshield.json` to customize:
 ### Environment Variables
 - `SHELLSHIELD_THRESHOLD`: max files per delete (default: 50)
 - `SHELLSHIELD_MODE`: set `permissive` or `interactive`
-- `SHELLSHIELD_SKIP`: bypass checks for next command (values: `1`, `true`, `yes`, `on`, `enable`)
+- `SHELLSHIELD_SKIP`: bypass checks for next command (values: `1`, `true`, `yes`, `on`, `enable`, `enabled`)
 - `SHELLSHIELD_MAX_SUBSHELL_DEPTH`: max nested `sh -c` analysis depth (default: 5)
 - Recommended: keep between `3` and `6` for low overhead; raise only if you rely on deep nested shells.
 
@@ -303,6 +303,8 @@ SHELLSHIELD_SKIP=1 rm -rf /tmp/test
 SHELLSHIELD_SKIP=true rm -rf /tmp/test
 SHELLSHIELD_SKIP=yes rm -rf /tmp/test
 SHELLSHIELD_SKIP=on rm -rf /tmp/test
+SHELLSHIELD_SKIP=enable rm -rf /tmp/test
+SHELLSHIELD_SKIP=enabled rm -rf /tmp/test
 
 # Or set globally (not recommended for daily use):
 export SHELLSHIELD_SKIP=1

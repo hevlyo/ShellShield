@@ -14,7 +14,7 @@ export class CoreAstRule implements SecurityRule {
   readonly phase = "post" as const;
 
   check(context: RuleContext): BlockResult | null {
-    const { tokens, config, depth, recursiveCheck } = context;
+    const { tokens, config } = context;
     const vars: Record<string, string> = {};
     let nextMustBeCommand = true;
 
@@ -23,7 +23,7 @@ export class CoreAstRule implements SecurityRule {
       const entry = tokens[i];
 
       if (isOperator(entry)) {
-        const opResult = this.handleOperator(entry, tokens[i + 1]);
+        const opResult = this.handleOperator(entry, tokens[i + 1], vars);
         if (opResult) return opResult;
         nextMustBeCommand = true;
         i++;
@@ -50,12 +50,13 @@ export class CoreAstRule implements SecurityRule {
         continue;
       }
 
-      const normalizedEntry = normalizeCommandName(entry);
+      const resolvedEntry = resolveVariable(entry, vars) || entry;
+      const normalizedEntry = normalizeCommandName(resolvedEntry);
 
-      const curlCheck = this.handleCurlWget(normalizedEntry, tokens, i, config);
+      const curlCheck = this.handleCurlWget(normalizedEntry, tokens, i, config, vars);
       if (curlCheck) return curlCheck;
 
-      const subCheck = this.handleBashSubshells(normalizedEntry, tokens, i);
+      const subCheck = this.handleBashSubshells(normalizedEntry, tokens, i, vars);
       if (subCheck) return subCheck;
 
       if (this.isCommandPrefix(normalizedEntry)) {
@@ -69,7 +70,7 @@ export class CoreAstRule implements SecurityRule {
         continue;
       }
 
-      const commandResult = this.handleCommand(entry, i, context, vars);
+      const commandResult = this.handleCommand(resolvedEntry, i, context, vars);
       if (commandResult) return commandResult;
 
       i++;
@@ -78,10 +79,10 @@ export class CoreAstRule implements SecurityRule {
     return null;
   }
 
-  private handleOperator(opEntry: { op: string }, nextEntry: ParsedEntry | undefined): BlockResult | null {
+  private handleOperator(opEntry: { op: string }, nextEntry: ParsedEntry | undefined, vars: Record<string, string>): BlockResult | null {
     if (opEntry.op === "<(") {
       if (typeof nextEntry === "string") {
-        const normalizedNext = normalizeCommandName(resolveVariable(nextEntry, {}));
+        const normalizedNext = normalizeCommandName(resolveVariable(nextEntry, vars));
         if (normalizedNext === "curl" || normalizedNext === "wget") {
           return {
             blocked: true,
@@ -158,28 +159,32 @@ export class CoreAstRule implements SecurityRule {
     return null;
   }
 
-  private handleCurlWget(normalizedEntry: string, tokens: ParsedEntry[], i: number, config: any): BlockResult | null {
+  private handleCurlWget(normalizedEntry: string, tokens: ParsedEntry[], i: number, config: any, vars: Record<string, string>): BlockResult | null {
     if (normalizedEntry === "curl" || normalizedEntry === "wget") {
       const remaining = tokens.slice(i + 1);
       const args = remaining.filter((item) => typeof item === "string") as string[];
       const pipeCheck = checkPipeToShell(args, remaining, config.trustedDomains);
       if (pipeCheck) return pipeCheck;
 
-      return this.checkDownloadAndExec(remaining, args);
+      return this.checkDownloadAndExec(remaining, args, vars);
     }
     return null;
   }
 
-  private handleBashSubshells(normalizedEntry: string, tokens: ParsedEntry[], i: number): BlockResult | null {
+  private handleBashSubshells(normalizedEntry: string, tokens: ParsedEntry[], i: number, vars: Record<string, string>): BlockResult | null {
     if (normalizedEntry === "bash" || normalizedEntry === "sh" || normalizedEntry === "zsh") {
       const remaining = tokens.slice(i + 1);
       const hasSubstitution = remaining.some(
-        (item) =>
-          typeof item === "string" &&
-          (item.includes("<(curl") ||
-            item.includes("<(wget") ||
-            item.includes("< <(curl") ||
-            item.includes("< <(wget"))
+        (item) => {
+          if (typeof item !== "string") return false;
+          const resolved = resolveVariable(item, vars);
+          return (
+            resolved.includes("<(curl") ||
+            resolved.includes("<(wget") ||
+            resolved.includes("< <(curl") ||
+            resolved.includes("< <(wget")
+          );
+        }
       );
       if (hasSubstitution) {
         return {
@@ -216,13 +221,36 @@ export class CoreAstRule implements SecurityRule {
     return null;
   }
 
-  private checkDownloadAndExec(remaining: ParsedEntry[], args: string[]): BlockResult | null {
+  private checkDownloadAndExec(remaining: ParsedEntry[], args: string[], vars: Record<string, string>): BlockResult | null {
       const outputFlagIndex = args.findIndex(
-        (arg) => arg === "-o" || arg === "--output"
+        (arg) =>
+          arg === "-o" ||
+          arg === "--output" ||
+          arg === "-O" ||
+          arg === "--output-document" ||
+          arg.startsWith("-o") ||
+          arg.startsWith("-O") ||
+          arg.startsWith("--output=") ||
+          arg.startsWith("--output-document=")
       );
-      if (outputFlagIndex === -1 || outputFlagIndex + 1 >= args.length) return null;
+      if (outputFlagIndex === -1) return null;
     
-      const outputPath = args[outputFlagIndex + 1];
+      const outputFlag = args[outputFlagIndex];
+      let outputPath: string | undefined;
+      if (
+        outputFlag === "-o" ||
+        outputFlag === "--output" ||
+        outputFlag === "-O" ||
+        outputFlag === "--output-document"
+      ) {
+        outputPath = args[outputFlagIndex + 1];
+      } else if (outputFlag.startsWith("--output=")) {
+        outputPath = outputFlag.slice("--output=".length);
+      } else if (outputFlag.startsWith("--output-document=")) {
+        outputPath = outputFlag.slice("--output-document=".length);
+      } else if (outputFlag.startsWith("-o") || outputFlag.startsWith("-O")) {
+        outputPath = outputFlag.slice(2);
+      }
       if (!outputPath || outputPath === "/dev/stdout") return null;
     
       const opIdx = remaining.findIndex(
@@ -230,11 +258,11 @@ export class CoreAstRule implements SecurityRule {
       );
       if (opIdx === -1) return null;
     
-      const nextCmd = remaining[opIdx + 1];
-      const nextArg = remaining[opIdx + 2];
-      if (typeof nextCmd !== "string") return null;
+      const nextCmdEntry = remaining[opIdx + 1];
+      if (typeof nextCmdEntry !== "string") return null;
     
-      const nextName = normalizeCommandName(nextCmd);
+      const nextCmdResolved = resolveVariable(nextCmdEntry, vars);
+      const nextName = normalizeCommandName(nextCmdResolved);
 
       const dangerousCommands = new Set([
         ...SHELL_COMMANDS,
@@ -245,25 +273,16 @@ export class CoreAstRule implements SecurityRule {
     
       if (!dangerousCommands.has(nextName)) return null;
     
-      if (typeof nextArg === "string" && nextArg === outputPath) {
+      const allNextArgs = remaining.slice(opIdx + 2).filter((e): e is string => typeof e === "string");
+      if (allNextArgs.some(arg => {
+        const resolvedArg = resolveVariable(arg, vars);
+        return resolvedArg === outputPath || resolvedArg.includes(outputPath);
+      })) {
         return {
           blocked: true,
           reason: "DOWNLOAD-AND-EXEC DETECTED",
           suggestion: "Downloading and executing a script in one command is dangerous. Review the script first.",
         };
-      }
-    
-      if (nextName === "bash" || nextName === "sh" || nextName === "zsh" || 
-          nextName === "python" || nextName === "python3" || nextName === "perl" ||
-          nextName === "ruby" || nextName === "node") {
-        const allArgs = remaining.slice(opIdx + 2).filter((e): e is string => typeof e === "string");
-        if (allArgs.some(arg => arg === outputPath || arg.includes(outputPath))) {
-          return {
-            blocked: true,
-            reason: "DOWNLOAD-AND-EXEC DETECTED",
-            suggestion: "Downloading and executing a script in one command is dangerous. Review the script first.",
-          };
-        }
       }
     
       return null;

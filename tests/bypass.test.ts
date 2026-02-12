@@ -45,4 +45,10 @@ describe("Bypass utilities", () => {
     const tokens = ["FOO=bar", { op: "|" }, "SHELLSHIELD_SKIP=1"];
     expect(extractEnvVar(tokens, "SHELLSHIELD_SKIP")).toBeUndefined();
   });
+
+  test("isBypassEnabled handles whitespace", () => {
+    expect(isBypassEnabled(" 1 ")).toBe(true);
+    expect(isBypassEnabled("true ")).toBe(true);
+    expect(isBypassEnabled(" yes")).toBe(true);
+  });
 });
