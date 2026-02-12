@@ -1,6 +1,11 @@
 import { BlockResult } from "../types";
 import { ParsedEntry } from "./types";
 
+const SHELL_FLAGS = new Set([
+  "-c", "--command", "-command",
+  "-C", "--init-command", "-init-command",
+]);
+
 export function checkSubshellCommand(
   entries: ParsedEntry[],
   startIndex: number,
@@ -10,7 +15,7 @@ export function checkSubshellCommand(
   const cIdx = remaining.findIndex((entry) => {
     if (typeof entry !== "string") return false;
     const flag = entry.toLowerCase();
-    return flag === "-c" || flag === "-command";
+    return SHELL_FLAGS.has(flag);
   });
   if (cIdx === -1 || startIndex + cIdx + 1 >= entries.length) return null;
 

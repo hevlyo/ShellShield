@@ -73,16 +73,18 @@ export function checkDestructive(
   };
 
   for (const rule of rules) {
-    if (rule.phase !== "pre") continue;
-    const result = annotateRule(rule.name, rule.check(stringContext));
-    if (result?.blocked) return result;
+    if (rule.phase === "pre") {
+      const result = annotateRule(rule.name, rule.check(stringContext));
+      if (result?.blocked) return result;
+    }
   }
 
   // 2. Parse Command
-  const vars: Record<string, string> = {};
   let tokens: ParsedEntry[] = [];
   try {
-    tokens = parse(command, (key) => vars[key] || `$${key}`) as ParsedEntry[];
+    // We use a callback that preserves unknown variables in ${VAR} format
+    // so we can resolve them later in CoreAstRule with local assignments.
+    tokens = parse(command, (key) => `\${${key}}`) as ParsedEntry[];
   } catch {
     return {
       blocked: true,
@@ -102,9 +104,10 @@ export function checkDestructive(
   };
 
   for (const rule of rules) {
-    if (rule.phase !== "post") continue;
-    const result = annotateRule(rule.name, rule.check(fullContext));
-    if (result?.blocked) return result;
+    if (rule.phase === "post") {
+      const result = annotateRule(rule.name, rule.check(fullContext));
+      if (result?.blocked) return result;
+    }
   }
 
   return { blocked: false };

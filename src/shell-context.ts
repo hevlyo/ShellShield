@@ -67,7 +67,13 @@ export function writeShellContextSnapshot(path: string, snapshot: ShellContextSn
   cache = { path, snapshot };
 }
 
+const MAX_TYPE_OUTPUT_LENGTH = 10000;
+
 export function parseTypeOutput(output: string): ShellContextEntry {
+  if (output.length > MAX_TYPE_OUTPUT_LENGTH) {
+    return { kind: "unknown", output: output.substring(0, 100) + "..." };
+  }
+
   const out = output.trim();
   const first = out.split("\n")[0] ?? "";
 

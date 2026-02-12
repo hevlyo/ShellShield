@@ -34,7 +34,7 @@ export function formatBlockedMessage(reason: string, suggestion: string, isTty: 
     `${line}\n` +
     `${bold}${yellow}ACTION REQUIRED:${reset} ${highlightedSuggestion}\n` +
     `${line}\n` +
-    `${dim}Bypass: SHELLSHIELD_SKIP=1 <command>${reset}\n` +
+    `${dim}Bypass: SHELLSHIELD_SKIP=1 <command>  (or: true, yes, on, enable, enabled)${reset}\n` +
     `${dim}Hint:   set SHELLSHIELD_MODE=interactive for quick prompts${reset}\n` +
     `${dim}ShellShield - Keeping your terminal safe.${reset}`
   );

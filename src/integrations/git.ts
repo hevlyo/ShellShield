@@ -18,7 +18,7 @@ function processGitStatusOutput(
   for (const line of out.split("\n")) {
     const rawPath = line.slice(3).trim();
     if (!rawPath) continue;
-    const pathPart = rawPath.includes("->") ? rawPath.split("->").pop()!.trim() : rawPath;
+    const pathPart = rawPath.includes("->") ? (rawPath.split("->").pop()?.trim() ?? rawPath) : rawPath;
     const mapped =
       pathspecToOriginal.get(pathPart) ||
       pathspecToOriginal.get(pathPart.replace(/^\.\//, "")) ||

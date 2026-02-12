@@ -2,40 +2,31 @@ import { SHELL_COMMANDS } from "../constants";
 import { isTrustedDomain } from "../security/validators";
 import { BlockResult } from "../types";
 import { ParsedEntry, isOperator } from "./types";
+import { normalizeCommandName } from "./utils";
 
 const INSECURE_FLAGS = new Set(["-k", "--insecure", "--no-check-certificate"]);
 
-export function checkPipeToShell(
-  args: string[],
-  remaining: ParsedEntry[],
-  trustedDomains: string[]
-): BlockResult | null {
+function checkUrlCredentials(args: string[]): BlockResult | null {
   for (const arg of args) {
-    if (/^https?:\/\/[^/]+:[^/]+@/.test(arg)) {
-      return {
-        blocked: true,
-        reason: "CREDENTIAL EXPOSURE DETECTED",
-        suggestion: "Commands should not include credentials in URLs. Use environment variables or netrc.",
-      };
+    if (arg.includes("://") && arg.includes("@")) {
+      try {
+        const urlObj = new URL(arg);
+        if (urlObj.username || urlObj.password) {
+          return {
+            blocked: true,
+            reason: "CREDENTIAL EXPOSURE DETECTED",
+            suggestion: "Commands should not include credentials in URLs. Use environment variables or netrc.",
+          };
+        }
+      } catch {
+        continue;
+      }
     }
   }
+  return null;
+}
 
-  const pipeIdx = remaining.findIndex(
-    (entry) => isOperator(entry) && entry.op === "|"
-  );
-  if (pipeIdx === -1) return null;
-
-  const nextPart = remaining[pipeIdx + 1];
-  if (typeof nextPart !== "string") return null;
-
-  const nextCmd = nextPart.split("/").pop()?.toLowerCase() ?? "";
-  if (!SHELL_COMMANDS.has(nextCmd)) return null;
-
-  const url = args.find((arg) => arg.startsWith("http"));
-  if (url && isTrustedDomain(url, trustedDomains)) {
-    return null;
-  }
-
+function checkTransportSecurity(args: string[]): BlockResult | null {
   if (args.some((arg) => arg.startsWith("http://"))) {
     return {
       blocked: true,
@@ -51,6 +42,35 @@ export function checkPipeToShell(
       suggestion: "Piping to a shell with certificate validation disabled is extremely dangerous.",
     };
   }
+  return null;
+}
+
+export function checkPipeToShell(
+  args: string[],
+  remaining: ParsedEntry[],
+  trustedDomains: string[]
+): BlockResult | null {
+  const credentialCheck = checkUrlCredentials(args);
+  if (credentialCheck) return credentialCheck;
+
+  const pipeIdx = remaining.findIndex(
+    (entry) => isOperator(entry) && entry.op === "|"
+  );
+  if (pipeIdx === -1) return null;
+
+  const nextPart = remaining[pipeIdx + 1];
+  if (typeof nextPart !== "string") return null;
+
+  const nextCmd = normalizeCommandName(nextPart);
+  if (!SHELL_COMMANDS.has(nextCmd)) return null;
+
+  const url = args.find((arg) => arg.startsWith("http"));
+  if (url && isTrustedDomain(url, trustedDomains)) {
+    return null;
+  }
+
+  const transportCheck = checkTransportSecurity(args);
+  if (transportCheck) return transportCheck;
 
   return {
     blocked: true,

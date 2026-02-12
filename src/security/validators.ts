@@ -1,77 +1,77 @@
 import { TerminalInjectionResult } from "../types";
+import { MAX_INPUT_LENGTH } from "./patterns";
 
-export function hasHomograph(str: string): { detected: boolean; char?: string } {
-  const urls = str.match(/https?:\/\/[^\s"'`]+/g) || [];
-  const candidates = urls.length > 0 ? urls : str.match(/\b[^\s]+\.[^\s]+\b/g) || [];
+function getHostname(token: string): string {
+  let host = token.includes("://") ? token.split("://")[1] ?? "" : token;
+  host = host.split("/")[0] ?? "";
+  return host.split(":")[0] ?? "";
+}
+
+function analyzeChar(char: string, scripts: Set<string>): { isNonAscii: boolean } {
+  const isHidden = /[\u200B-\u200D\uFEFF]/.test(char);
+  if (isHidden) return { isNonAscii: false };
+
+  const code = char.codePointAt(0);
+  if (code === undefined) return { isNonAscii: false };
+  const lower = char.toLowerCase();
+
+  if (lower >= "a" && lower <= "z") {
+    scripts.add("latin");
+    return { isNonAscii: false };
+  }
+
+  if (code >= 0x0400 && code <= 0x04ff) {
+    scripts.add("cyrillic");
+    return { isNonAscii: true };
+  }
+
+  if (code >= 0x0370 && code <= 0x03ff) {
+    scripts.add("greek");
+    return { isNonAscii: true };
+  }
+
+  if (code > 127) {
+    scripts.add("other");
+    return { isNonAscii: true };
+  }
+
+  return { isNonAscii: false };
+}
+
+function isSuspiciousHost(host: string): { detected: boolean; char?: string } {
+  if (!host.includes(".")) return { detected: false };
+
+  const scripts = new Set<string>();
+  let firstNonAscii: string | undefined;
+  let hasNonAsciiLetter = false;
+
+  for (const char of host) {
+    const { isNonAscii } = analyzeChar(char, scripts);
+    if (isNonAscii) {
+      hasNonAsciiLetter = true;
+      firstNonAscii = firstNonAscii ?? char;
+    }
+  }
+
+  if (hasNonAsciiLetter && (scripts.has("latin") && scripts.size > 1 || scripts.size > 1)) {
+    return { detected: true, char: firstNonAscii };
+  }
+
+  return { detected: false };
+}
+
+export function hasHomograph(str: string): { detected: boolean; char?: string; reason?: string } {
+  if (str.length > MAX_INPUT_LENGTH) {
+    return { detected: true, reason: "INPUT_TOO_LONG", char: "exceeds MAX_INPUT_LENGTH" };
+  }
+
+  const urls = str.match(/https?:\/\/[^\s"'`]{0,2000}/g) || [];
+  const candidates = urls.length > 0 ? urls : str.match(/\b[^\s]{1,253}\.[^\s]{1,253}\b/g) || [];
 
   for (const token of candidates) {
-    let host = "";
-    if (token.includes("://")) {
-      host = token.split("://")[1] ?? "";
-    } else {
-      host = token;
-    }
-
-    host = host.split("/")[0] ?? "";
-    host = host.split(":")[0] ?? "";
-
-    if (!host.includes(".")) continue;
-
-    const scripts = new Set<string>();
-    let suspiciousChar: string | undefined;
-    let hasNonAsciiLetter = false;
-
-    for (const char of host) {
-      const isHidden = /[\u200B-\u200D\uFEFF]/.test(char);
-      if (isHidden) continue;
-
-      const code = char.codePointAt(0);
-      if (code === undefined) continue;
-      const lower = char.toLowerCase();
-
-      // Only consider letters for script mixing heuristics
-      const isAsciiLetter = lower >= "a" && lower <= "z";
-      if (isAsciiLetter) {
-        scripts.add("latin");
-        continue;
-      }
-
-      // Cyrillic
-      if (code >= 0x0400 && code <= 0x04ff) {
-        scripts.add("cyrillic");
-        hasNonAsciiLetter = true;
-        suspiciousChar = suspiciousChar ?? char;
-        continue;
-      }
-
-      // Greek
-      if (code >= 0x0370 && code <= 0x03ff) {
-        scripts.add("greek");
-        hasNonAsciiLetter = true;
-        suspiciousChar = suspiciousChar ?? char;
-        continue;
-      }
-
-      // Any other non-ASCII letter-like character
-      if (code > 127) {
-        // Treat as non-ascii; mark script as other for mixing detection
-        scripts.add("other");
-        hasNonAsciiLetter = true;
-        suspiciousChar = suspiciousChar ?? char;
-      }
-    }
-
-    // IDN-safe heuristic:
-    // - Allow pure non-Latin hostnames (single non-latin script) to reduce false positives.
-    // - Block mixed scripts or latin+non-ascii mixes (classic homograph).
-    if (hasNonAsciiLetter) {
-      if (scripts.has("latin") && scripts.size > 1) {
-        return { detected: true, char: suspiciousChar };
-      }
-      if (scripts.size > 1) {
-        return { detected: true, char: suspiciousChar };
-      }
-    }
+    const host = getHostname(token);
+    const result = isSuspiciousHost(host);
+    if (result.detected) return result;
   }
 
   return { detected: false };

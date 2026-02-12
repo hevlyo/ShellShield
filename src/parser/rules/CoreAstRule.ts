@@ -7,19 +7,132 @@ import { checkSubshellCommand } from "../subshell";
 import { SHELL_COMMANDS } from "../../constants";
 import { isSensitivePath } from "../../security/paths";
 import { getShellContextEntry, findBlockedTokenInShellContext } from "../../shell-context";
+import { normalizeCommandName, resolveVariable } from "../utils";
 
-/**
- * Rule: Core AST Analysis
- * Iterates through parsed shell tokens to detect complex threats like:
- * - Process substitution (<(curl ...))
- * - Sensitive path writes (-o /etc/passwd)
- * - Dangerous pipes (curl | bash)
- * - Blocked commands (rm, mv critical paths)
- * - Recursive subshells
- */
 export class CoreAstRule implements SecurityRule {
   readonly name = "CoreAstRule";
   readonly phase = "post" as const;
+
+  check(context: RuleContext): BlockResult | null {
+    const { tokens, config } = context;
+    const vars: Record<string, string> = {};
+    let nextMustBeCommand = true;
+
+    let i = 0;
+    while (i < tokens.length) {
+      const entry = tokens[i];
+
+      if (isOperator(entry)) {
+        const opResult = this.handleOperator(entry, tokens[i + 1], vars);
+        if (opResult) return opResult;
+        nextMustBeCommand = true;
+        i++;
+        continue;
+      }
+
+      if (typeof entry !== "string") {
+        i++;
+        continue;
+      }
+
+      if (!nextMustBeCommand) {
+        this.checkEnvironmentVariable(entry, vars);
+        const pathCheck = this.checkSensitivePathWrite(entry, tokens, i);
+        if (pathCheck) return pathCheck;
+        i++;
+        continue;
+      }
+
+      nextMustBeCommand = false;
+      if (this.checkEnvironmentVariable(entry, vars)) {
+        nextMustBeCommand = true;
+        i++;
+        continue;
+      }
+
+      const resolvedEntry = resolveVariable(entry, vars) || entry;
+      const normalizedEntry = normalizeCommandName(resolvedEntry);
+
+      const curlCheck = this.handleCurlWget(normalizedEntry, tokens, i, config, vars);
+      if (curlCheck) return curlCheck;
+
+      const subCheck = this.handleBashSubshells(normalizedEntry, tokens, i, vars);
+      if (subCheck) return subCheck;
+
+      if (this.isCommandPrefix(normalizedEntry)) {
+        nextMustBeCommand = true;
+        i++;
+        continue;
+      }
+
+      if (normalizedEntry === "git" && this.isGitRm(tokens[i + 1])) {
+        i += 2;
+        continue;
+      }
+
+      const commandResult = this.handleCommand(resolvedEntry, i, context, vars);
+      if (commandResult) return commandResult;
+
+      i++;
+    }
+
+    return null;
+  }
+
+  private handleOperator(opEntry: { op: string }, nextEntry: ParsedEntry | undefined, vars: Record<string, string>): BlockResult | null {
+    if (opEntry.op === "<(") {
+      if (typeof nextEntry === "string") {
+        const normalizedNext = normalizeCommandName(resolveVariable(nextEntry, vars));
+        if (normalizedNext === "curl" || normalizedNext === "wget") {
+          return {
+            blocked: true,
+            reason: "PROCESS SUBSTITUTION DETECTED",
+            suggestion: "Executing remote scripts via process substitution is dangerous.",
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  private isCommandPrefix(entry: string): boolean {
+    return ["sudo", "xargs", "command", "env"].includes(entry);
+  }
+
+  private isGitRm(nextEntry: ParsedEntry | undefined): boolean {
+    return typeof nextEntry === "string" && nextEntry.toLowerCase() === "rm";
+  }
+
+  private handleCommand(entry: string, i: number, context: RuleContext, vars: Record<string, string>): BlockResult | null {
+    const { tokens, config, depth, recursiveCheck } = context;
+    const resolvedCmd = this.resolveCmdName(entry, vars);
+    
+    const ctxCheck = this.checkShellContext(resolvedCmd, config);
+    if (ctxCheck) return ctxCheck;
+
+    if (config.allowed.has(resolvedCmd)) return null;
+
+    const args = tokens.slice(i + 1).filter((item) => typeof item === "string") as string[];
+    const blockedCheck = checkBlockedCommand(resolvedCmd, args, {
+      blocked: config.blocked,
+      threshold: config.threshold,
+    });
+    if (blockedCheck) return blockedCheck;
+
+    if (resolvedCmd === "find") {
+      const findCheck = checkFindCommand(tokens.slice(i + 1), config.blocked);
+      if (findCheck) return findCheck;
+    }
+
+    if (SHELL_COMMANDS.has(resolvedCmd)) {
+      const subshellResult = checkSubshellCommand(tokens, i + 1, (subshellCmd) => {
+        return recursiveCheck(subshellCmd, depth + 1);
+      });
+      if (subshellResult?.blocked) return subshellResult;
+    }
+
+    return null;
+  }
 
   private checkEnvironmentVariable(entry: string, vars: Record<string, string>): boolean {
     if (entry.includes("=") && !entry.startsWith("-")) {
@@ -46,28 +159,32 @@ export class CoreAstRule implements SecurityRule {
     return null;
   }
 
-  private checkCurlWget(normalizedEntry: string, tokens: ParsedEntry[], i: number, config: any): BlockResult | null {
+  private handleCurlWget(normalizedEntry: string, tokens: ParsedEntry[], i: number, config: any, vars: Record<string, string>): BlockResult | null {
     if (normalizedEntry === "curl" || normalizedEntry === "wget") {
       const remaining = tokens.slice(i + 1);
       const args = remaining.filter((item) => typeof item === "string") as string[];
       const pipeCheck = checkPipeToShell(args, remaining, config.trustedDomains);
       if (pipeCheck) return pipeCheck;
 
-      return this.checkDownloadAndExec(remaining, args);
+      return this.checkDownloadAndExec(remaining, args, vars);
     }
     return null;
   }
 
-  private checkBashSubshells(normalizedEntry: string, tokens: ParsedEntry[], i: number): BlockResult | null {
+  private handleBashSubshells(normalizedEntry: string, tokens: ParsedEntry[], i: number, vars: Record<string, string>): BlockResult | null {
     if (normalizedEntry === "bash" || normalizedEntry === "sh" || normalizedEntry === "zsh") {
       const remaining = tokens.slice(i + 1);
       const hasSubstitution = remaining.some(
-        (item) =>
-          typeof item === "string" &&
-          (item.includes("<(curl") ||
-            item.includes("<(wget") ||
-            item.includes("< <(curl") ||
-            item.includes("< <(wget"))
+        (item) => {
+          if (typeof item !== "string") return false;
+          const resolved = resolveVariable(item, vars);
+          return (
+            resolved.includes("<(curl") ||
+            resolved.includes("<(wget") ||
+            resolved.includes("< <(curl") ||
+            resolved.includes("< <(wget")
+          );
+        }
       );
       if (hasSubstitution) {
         return {
@@ -81,24 +198,8 @@ export class CoreAstRule implements SecurityRule {
   }
 
   private resolveCmdName(entry: string, vars: Record<string, string>): string {
-    const stripped = entry.startsWith("\\") ? entry.slice(1) : entry;
-    const basenamePart = stripped.split("/").pop() ?? "";
-
-    const resolvedVar = this.resolveVarToken(basenamePart, vars);
-    if (resolvedVar) {
-      return resolvedVar.split("/").pop()?.toLowerCase() ?? "";
-    }
-    return basenamePart.toLowerCase();
-  }
-
-  private checkGitRm(normalizedEntry: string, tokens: ParsedEntry[], i: number): number {
-    if (normalizedEntry === "git" && i + 1 < tokens.length) {
-      const next = tokens[i + 1];
-      if (typeof next === "string" && next.toLowerCase() === "rm") {
-        return i + 1;
-      }
-    }
-    return i;
+    const expanded = resolveVariable(entry, vars);
+    return normalizeCommandName(expanded);
   }
 
   private checkShellContext(resolvedCmd: string, config: any): BlockResult | null {
@@ -120,98 +221,36 @@ export class CoreAstRule implements SecurityRule {
     return null;
   }
 
-  check(context: RuleContext): BlockResult | null {
-    const { tokens, config, depth, recursiveCheck } = context;
-    const vars: Record<string, string> = {};
-    let nextMustBeCommand = true;
-
-    for (let i = 0; i < tokens.length; i++) {
-      const entry = tokens[i];
-
-      if (isOperator(entry)) {
-        if (entry.op === "<(") {
-          const next = tokens[i + 1];
-          if (typeof next === "string" && (next === "curl" || next === "wget")) {
-            return {
-              blocked: true,
-              reason: "PROCESS SUBSTITUTION DETECTED",
-              suggestion: "Executing remote scripts via process substitution is dangerous.",
-            };
-          }
-        }
-        nextMustBeCommand = true;
-        continue;
-      }
-
-      if (typeof entry !== "string") continue;
-
-      if (!nextMustBeCommand) {
-        this.checkEnvironmentVariable(entry, vars);
-        const pathCheck = this.checkSensitivePathWrite(entry, tokens, i);
-        if (pathCheck) return pathCheck;
-        continue;
-      }
-
-      nextMustBeCommand = false;
-      if (this.checkEnvironmentVariable(entry, vars)) {
-        nextMustBeCommand = true;
-        continue;
-      }
-
-      const normalizedEntry = entry.toLowerCase();
-      const curlCheck = this.checkCurlWget(normalizedEntry, tokens, i, config);
-      if (curlCheck) return curlCheck;
-
-      const subCheck = this.checkBashSubshells(normalizedEntry, tokens, i);
-      if (subCheck) return subCheck;
-
-      if (["sudo", "xargs", "command", "env"].includes(normalizedEntry)) {
-        nextMustBeCommand = true;
-        continue;
-      }
-
-      const nextI = this.checkGitRm(normalizedEntry, tokens, i);
-      if (nextI !== i) {
-        i = nextI;
-        continue;
-      }
-
-      const resolvedCmd = this.resolveCmdName(entry, vars);
-      const ctxCheck = this.checkShellContext(resolvedCmd, config);
-      if (ctxCheck) return ctxCheck;
-
-      if (config.allowed.has(resolvedCmd)) continue;
-
-      const args = tokens.slice(i + 1).filter((item) => typeof item === "string") as string[];
-      const blockedCheck = checkBlockedCommand(resolvedCmd, args, {
-        blocked: config.blocked,
-        threshold: config.threshold,
-      });
-      if (blockedCheck) return blockedCheck;
-
-      if (resolvedCmd === "find") {
-        const findCheck = checkFindCommand(tokens.slice(i + 1), config.blocked);
-        if (findCheck) return findCheck;
-      }
-
-      if (SHELL_COMMANDS.has(resolvedCmd)) {
-        const subshellResult = checkSubshellCommand(tokens, i + 1, (subshellCmd) => {
-          return recursiveCheck(subshellCmd, depth + 1);
-        });
-        if (subshellResult?.blocked) return subshellResult;
-      }
-    }
-
-    return null;
-  }
-
-  private checkDownloadAndExec(remaining: ParsedEntry[], args: string[]): BlockResult | null {
-    const outputFlagIndex = args.findIndex(
-        (arg) => arg === "-o" || arg === "--output"
+  private checkDownloadAndExec(remaining: ParsedEntry[], args: string[], vars: Record<string, string>): BlockResult | null {
+      const outputFlagIndex = args.findIndex(
+        (arg) =>
+          arg === "-o" ||
+          arg === "--output" ||
+          arg === "-O" ||
+          arg === "--output-document" ||
+          arg.startsWith("-o") ||
+          arg.startsWith("-O") ||
+          arg.startsWith("--output=") ||
+          arg.startsWith("--output-document=")
       );
-      if (outputFlagIndex === -1 || outputFlagIndex + 1 >= args.length) return null;
+      if (outputFlagIndex === -1) return null;
     
-      const outputPath = args[outputFlagIndex + 1];
+      const outputFlag = args[outputFlagIndex];
+      let outputPath: string | undefined;
+      if (
+        outputFlag === "-o" ||
+        outputFlag === "--output" ||
+        outputFlag === "-O" ||
+        outputFlag === "--output-document"
+      ) {
+        outputPath = args[outputFlagIndex + 1];
+      } else if (outputFlag.startsWith("--output=")) {
+        outputPath = outputFlag.slice("--output=".length);
+      } else if (outputFlag.startsWith("--output-document=")) {
+        outputPath = outputFlag.slice("--output-document=".length);
+      } else if (outputFlag.startsWith("-o") || outputFlag.startsWith("-O")) {
+        outputPath = outputFlag.slice(2);
+      }
       if (!outputPath || outputPath === "/dev/stdout") return null;
     
       const opIdx = remaining.findIndex(
@@ -219,14 +258,26 @@ export class CoreAstRule implements SecurityRule {
       );
       if (opIdx === -1) return null;
     
-      const nextCmd = remaining[opIdx + 1];
-      const nextArg = remaining[opIdx + 2];
-      if (typeof nextCmd !== "string" || typeof nextArg !== "string") return null;
+      const nextCmdEntry = remaining[opIdx + 1];
+      if (typeof nextCmdEntry !== "string") return null;
     
-      const nextName = nextCmd.split("/").pop()?.toLowerCase() ?? "";
-      if (!SHELL_COMMANDS.has(nextName)) return null;
+      const nextCmdResolved = resolveVariable(nextCmdEntry, vars);
+      const nextName = normalizeCommandName(nextCmdResolved);
+
+      const dangerousCommands = new Set([
+        ...SHELL_COMMANDS,
+        "python", "python3", "python2",
+        "perl", "ruby", "node", "bun", "php",
+        "source", ".", "chmod", "exec"
+      ]);
     
-      if (nextArg === outputPath) {
+      if (!dangerousCommands.has(nextName)) return null;
+    
+      const allNextArgs = remaining.slice(opIdx + 2).filter((e): e is string => typeof e === "string");
+      if (allNextArgs.some(arg => {
+        const resolvedArg = resolveVariable(arg, vars);
+        return resolvedArg === outputPath || resolvedArg.includes(outputPath);
+      })) {
         return {
           blocked: true,
           reason: "DOWNLOAD-AND-EXEC DETECTED",
@@ -235,30 +286,5 @@ export class CoreAstRule implements SecurityRule {
       }
     
       return null;
-  }
-
-  private resolveVarToken(token: string, vars: Record<string, string>): string | null {
-    if (!token) return null;
-    if (token.startsWith("$")) {
-      const inner = token.slice(1);
-      const defaultIdx = inner.indexOf(":-");
-      const name = defaultIdx >= 0 ? inner.slice(0, defaultIdx) : inner;
-      const fallback = defaultIdx >= 0 ? inner.slice(defaultIdx + 2) : "";
-      const val = vars[name] ?? process.env[name];
-      if (val && val.length > 0) return val;
-      return fallback.length > 0 ? fallback : null;
-    }
-
-    if (token.startsWith("${") && token.endsWith("}")) {
-      const inner = token.slice(2, -1);
-      const defaultIdx = inner.indexOf(":-");
-      const name = defaultIdx >= 0 ? inner.slice(0, defaultIdx) : inner;
-      const fallback = defaultIdx >= 0 ? inner.slice(defaultIdx + 2) : "";
-      const val = vars[name] ?? process.env[name];
-      if (val && val.length > 0) return val;
-      return fallback.length > 0 ? fallback : null;
-    }
-
-    return null;
   }
 }

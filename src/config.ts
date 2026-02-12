@@ -9,8 +9,8 @@ const ConfigSchema = z.object({
   blocked: z.array(z.string()).optional(),
   allowed: z.array(z.string()).optional(),
   trustedDomains: z.array(z.string()).optional(),
-  threshold: z.number().int().positive().optional(),
-  maxSubshellDepth: z.number().int().min(0).optional(),
+  threshold: z.preprocess((val) => typeof val === "string" ? Number.parseInt(val, 10) : val, z.number().int().positive()).optional(),
+  maxSubshellDepth: z.preprocess((val) => typeof val === "string" ? Number.parseInt(val, 10) : val, z.number().int().min(0)).optional(),
   contextPath: z.string().min(1).optional(),
   mode: z.enum(["enforce", "permissive", "interactive"]).optional(),
   customRules: z
@@ -101,12 +101,11 @@ export function getConfiguration(): Config {
   const allowed = fileConfig.allowed || new Set<string>();
   const trustedDomains = fileConfig.trustedDomains || DEFAULT_TRUSTED_DOMAINS;
 
-  const threshold =
-    fileConfig.threshold || Number.parseInt(process.env.SHELLSHIELD_THRESHOLD || "50", 10);
+  const envThreshold = process.env.SHELLSHIELD_THRESHOLD ? Number.parseInt(process.env.SHELLSHIELD_THRESHOLD, 10) : undefined;
+  const threshold = fileConfig.threshold || (envThreshold && !Number.isNaN(envThreshold) ? envThreshold : 50);
 
-  const maxSubshellDepth =
-    fileConfig.maxSubshellDepth ??
-    (Number.parseInt(process.env.SHELLSHIELD_MAX_SUBSHELL_DEPTH || "5", 10) || 5);
+  const envMaxDepth = process.env.SHELLSHIELD_MAX_SUBSHELL_DEPTH ? Number.parseInt(process.env.SHELLSHIELD_MAX_SUBSHELL_DEPTH, 10) : undefined;
+  const maxSubshellDepth = fileConfig.maxSubshellDepth ?? (envMaxDepth && !Number.isNaN(envMaxDepth) ? envMaxDepth : 5);
 
   const mode =
     (process.env.SHELLSHIELD_MODE as "enforce" | "permissive" | "interactive") ||
