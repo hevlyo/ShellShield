@@ -51,7 +51,7 @@ jobs:
       - name: Upload coverage to Codecov
         if: ${{ secrets.CODECOV_TOKEN != '' }}
         # codecov/codecov-action v5.5.2
-        uses: codecov/codecov-action@0561704f0f02c16a585d4c7555e57fa2e44cf909
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
         with:
           files: ./coverage/lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
