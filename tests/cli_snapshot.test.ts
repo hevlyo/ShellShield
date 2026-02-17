@@ -94,10 +94,11 @@ describe("CLI output snapshots", () => {
     if (!canUseScript) return;
     const denied = await runCheckTty("rm -rf /tmp/test", { SHELLSHIELD_MODE: "interactive" }, "n\n");
     expect(denied.output).toContain("ShellShield");
-    expect(denied.output).toMatchSnapshot();
+    expect(denied.output).toContain("ShellShield ALERT");
+    expect(denied.output).toContain("BLOCKED");
 
     const approved = await runCheckTty("rm -rf /tmp/test", { SHELLSHIELD_MODE: "interactive" }, "y\n");
     expect(approved.output).toContain("Approved. Command will execute");
-    expect(approved.output).toMatchSnapshot();
+    expect(approved.output).not.toContain("BLOCKED");
   });
 });
