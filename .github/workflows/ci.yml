@@ -5,26 +5,53 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    name: Test (Bun 1.3.8)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        # actions/checkout v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        # oven-sh/setup-bun v2.1.2
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
         with:
-          bun-version: latest
+          bun-version: 1.3.8
+
+      - name: Restore Bun cache
+        # actions/cache v4.3.0
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-cache-${{ hashFiles('bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-cache-
+
       - name: Install dependencies
-        run: bun install --production --no-save --force
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+
       - name: Run tests
         run: bun test --max-concurrency 1 --timeout 15000 --coverage --coverage-reporter=lcov
+
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        if: ${{ env.CODECOV_TOKEN != '' }}
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        # codecov/codecov-action v5.5.2
+        uses: codecov/codecov-action@0561704f0f02c16a585d4c7555e57fa2e44cf909
         with:
           files: ./coverage/lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
