@@ -129,18 +129,18 @@ curl -fsSL https://hevlyo.github.io/ShellShield/install.sh -o /tmp/shellshield-i
 
 2. Verify integrity
 ```bash
-echo "e04b55f25dad3351317f27b39a6333a55efae350d4adfe21676d5e7c8b24ed17  /tmp/shellshield-install.sh" | sha256sum --check
+echo "2129c83bf2acdd31e2bddb2ca9723990689441f4f48be0d5439763752ad496ba  /tmp/shellshield-install.sh" | sha256sum --check
 ```
 
 3. Run only if OK
 ```bash
-SHELLSHIELD_INSTALL_SHA256="e04b55f25dad3351317f27b39a6333a55efae350d4adfe21676d5e7c8b24ed17" \
+SHELLSHIELD_INSTALL_SHA256="2129c83bf2acdd31e2bddb2ca9723990689441f4f48be0d5439763752ad496ba" \
   bash /tmp/shellshield-install.sh
 ```
 
 That’s it. ShellShield is now guarding your terminal.
 
-SHA256 (install.sh): `e04b55f25dad3351317f27b39a6333a55efae350d4adfe21676d5e7c8b24ed17`
+SHA256 (install.sh): `2129c83bf2acdd31e2bddb2ca9723990689441f4f48be0d5439763752ad496ba`
 
 GPG verification (optional):
 ```bash
@@ -184,6 +184,11 @@ shellshield --init
 Run:
 ```bash
 shellshield --init
+```
+
+Choose your protection mode (recommended after install):
+```bash
+shellshield --select-mode
 ```
 
 Paste the output into your shell profile.
@@ -289,6 +294,15 @@ ShellShield works out of the box. Create `.shellshield.json` to customize:
 - `enforce` (default): blocks dangerous commands
 - `permissive`: logs warnings but allows execution
 - `interactive`: prompts for confirmation
+
+Set or inspect mode from CLI:
+```bash
+shellshield --mode
+shellshield --mode enforce
+shellshield --mode interactive
+shellshield --mode permissive
+shellshield --select-mode
+```
 
 | Mode | What it does | When to use |
 |---|---|---|

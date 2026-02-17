@@ -162,6 +162,22 @@ else
   info_bold "$HOOK_SCRIPT"
 fi
 
+if [[ -t 0 && -t 1 ]]; then
+  echo
+  read -r -p "Configure ShellShield mode now? [Y/n] " setup_mode
+  setup_mode="${setup_mode:-Y}"
+  case "$setup_mode" in
+    [Nn]|[Nn][Oo])
+      info "Mode setup skipped. You can run: shellshield --select-mode"
+      ;;
+    *)
+      if ! bun run "$HOME/.shellshield/src/index.ts" --select-mode; then
+        info "Mode setup failed. You can retry later with: shellshield --select-mode"
+      fi
+      ;;
+  esac
+fi
+
 echo
 success "🎉 Done! Restart your shell to activate ShellShield."
 info_bold "Try running: rm -rf / (it will be blocked)"

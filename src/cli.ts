@@ -3,11 +3,12 @@ import { logAudit } from "./audit";
 import { getConfiguration } from "./config";
 import { ToolInput, Config } from "./types";
 import { createInterface } from "node:readline";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { printStats } from "./stats";
 import { formatBlockedMessage } from "./ui/terminal";
 import { writeShellContextSnapshot, parseTypeOutput, ShellContextSnapshot } from "./shell-context";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { scoreUrlRisk } from "./security/validators";
 import { isBypassEnabled, hasBypassPrefix } from "./utils/bypass";
 import { SHELL_TEMPLATES } from "./integrations/templates";
@@ -85,6 +86,13 @@ interface InitCommandContext {
   availablePwsh: string;
 }
 
+type ShellShieldMode = Config["mode"];
+const MODE_CHOICES: ShellShieldMode[] = ["enforce", "interactive", "permissive"];
+
+function isValidMode(value: string): value is ShellShieldMode {
+  return MODE_CHOICES.includes(value as ShellShieldMode);
+}
+
 function quotePosix(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
@@ -136,6 +144,81 @@ function resolveInitCommandContext(): InitCommandContext {
     availableFish: "type -q shellshield",
     availablePwsh: "Get-Command shellshield -ErrorAction SilentlyContinue",
   };
+}
+
+function userConfigPath(): string {
+  return join(homedir(), ".shellshield.json");
+}
+
+function readUserConfig(path: string): Record<string, unknown> {
+  if (!existsSync(path)) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return {};
+  }
+  return {};
+}
+
+function writeUserConfig(path: string, content: Record<string, unknown>): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(content, null, 2) + "\n", "utf8");
+}
+
+function persistMode(mode: ShellShieldMode): string {
+  const path = userConfigPath();
+  const cfg = readUserConfig(path);
+  cfg.mode = mode;
+  writeUserConfig(path, cfg);
+  return path;
+}
+
+function parseModeSelectionInput(input: string, current: ShellShieldMode): ShellShieldMode | null {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return current;
+  if (normalized === "1") return "enforce";
+  if (normalized === "2") return "interactive";
+  if (normalized === "3") return "permissive";
+  if (isValidMode(normalized)) return normalized;
+  return null;
+}
+
+async function promptModeSelection(current: ShellShieldMode): Promise<ShellShieldMode> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stderr,
+  });
+
+  try {
+    const menu =
+      "\nShellShield Mode Selector\n" +
+      "1) enforce (recommended)\n" +
+      "2) interactive\n" +
+      "3) permissive\n" +
+      `Current: ${current}\n`;
+
+    while (true) {
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(`${menu}Choose [1-3] (Enter keeps current): `, resolve);
+      });
+
+      const selected = parseModeSelectionInput(answer, current);
+      if (selected) return selected;
+      console.error("Invalid option. Use 1, 2, 3, or mode name.");
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+function printModeHelp(): void {
+  console.log("Usage:");
+  console.log("  shellshield --mode");
+  console.log("  shellshield --mode <enforce|interactive|permissive>");
+  console.log("  shellshield --select-mode");
 }
 
 function printSnapshotHelp(): void {
@@ -311,6 +394,47 @@ function handleScore(args: string[], config: Config): void {
   process.exit(0);
 }
 
+function handleMode(args: string[], config: Config): void {
+  const idx = args.indexOf("--mode");
+  const value = idx !== -1 ? args[idx + 1] : "";
+
+  if (value && !value.startsWith("--")) {
+    const mode = value.trim().toLowerCase();
+    if (!isValidMode(mode)) {
+      console.error(`Invalid mode: ${value}`);
+      printModeHelp();
+      process.exit(1);
+    }
+    const path = persistMode(mode);
+    console.log(`Mode updated: ${mode}`);
+    console.log(`Saved to: ${path}`);
+    process.exit(0);
+  }
+
+  console.log(`Current mode: ${config.mode}`);
+  if (process.env.SHELLSHIELD_MODE) {
+    console.log("Source: SHELLSHIELD_MODE (env override)");
+  } else {
+    console.log(`Source: ${userConfigPath()} or default`);
+  }
+  printModeHelp();
+  process.exit(0);
+}
+
+async function handleSelectMode(config: Config): Promise<void> {
+  if (!process.stdin.isTTY || !process.stderr.isTTY) {
+    console.error("Mode selector requires an interactive TTY.");
+    printModeHelp();
+    process.exit(1);
+  }
+
+  const selected = await promptModeSelection(config.mode);
+  const path = persistMode(selected);
+  console.log(`Mode updated: ${selected}`);
+  console.log(`Saved to: ${path}`);
+  process.exit(0);
+}
+
 function handleInit(): void {
   const shellPath = process.env.SHELL || "";
   const fallbackShell =
@@ -376,6 +500,14 @@ export async function main(): Promise<void> {
   if (args.includes("--stats")) {
     printStats();
     process.exit(0);
+  }
+
+  if (args.includes("--mode")) {
+    handleMode(args, config);
+  }
+
+  if (args.includes("--select-mode")) {
+    await handleSelectMode(config);
   }
 
   if (args.includes("--doctor")) {
