@@ -129,18 +129,18 @@ curl -fsSL https://hevlyo.github.io/ShellShield/install.sh -o /tmp/shellshield-i
 
 2. Verify integrity
 ```bash
-echo "2129c83bf2acdd31e2bddb2ca9723990689441f4f48be0d5439763752ad496ba  /tmp/shellshield-install.sh" | sha256sum --check
+echo "c92fe9ac968e5e7c421130b50981c4bdd715b51117390e936e1d122a82c00e3c  /tmp/shellshield-install.sh" | sha256sum --check
 ```
 
 3. Run only if OK
 ```bash
-SHELLSHIELD_INSTALL_SHA256="2129c83bf2acdd31e2bddb2ca9723990689441f4f48be0d5439763752ad496ba" \
+SHELLSHIELD_INSTALL_SHA256="c92fe9ac968e5e7c421130b50981c4bdd715b51117390e936e1d122a82c00e3c" \
   bash /tmp/shellshield-install.sh
 ```
 
 That’s it. ShellShield is now guarding your terminal.
 
-SHA256 (install.sh): `2129c83bf2acdd31e2bddb2ca9723990689441f4f48be0d5439763752ad496ba`
+SHA256 (install.sh): `c92fe9ac968e5e7c421130b50981c4bdd715b51117390e936e1d122a82c00e3c`
 
 GPG verification (optional):
 ```bash
@@ -193,6 +193,7 @@ shellshield --select-mode
 
 Paste the output into your shell profile.
 Supported shells: bash, zsh, fish, PowerShell (PSReadLine).
+The installer auto-wires bash/zsh/fish profiles by default.
 
 Common profile locations:
 - bash: `~/.bashrc`
@@ -231,12 +232,43 @@ JSON output:
 shellshield --score https://example.com/install.sh --json
 ```
 
+### Safe Remote Runner
+
+Safer replacement for `curl | bash`: download, inspect, score, and confirm.
+
+```bash
+shellshield --run https://example.com/install.sh
+```
+
+Useful flags:
+- `--dry-run`: review only, do not execute
+- `--yes`: execute without interactive confirmation
+- `--force`: allow execution in enforce mode even with risky findings
+
+```bash
+shellshield --run https://example.com/install.sh --dry-run
+```
+
 ### Explain Last Block/Warning
 
 Inspect the latest audit entry that triggered a rule:
 
 ```bash
 shellshield --why
+```
+
+### Execution Receipt
+
+Show the latest `shellshield --run` audit receipt:
+
+```bash
+shellshield --receipt
+```
+
+List recent receipts:
+
+```bash
+shellshield --receipt --list --count 10
 ```
 
 ### More Ways To Run

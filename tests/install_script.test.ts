@@ -35,4 +35,12 @@ describe("Installer script", () => {
     expect(proc.exitCode).toBe(1);
     expect(out).toContain("bun is required");
   });
+
+  test("includes fish profile auto-wiring", () => {
+    const content = readFileSync(INSTALLER, "utf8");
+    expect(content).toContain("fish)");
+    expect(content).toContain("PROFILE=\"$HOME/.config/fish/config.fish\"");
+    expect(content).toContain("if test -f \"$HOME/.shellshield/src/index.ts\"");
+    expect(content).toContain("eval (bun run \"$HOME/.shellshield/src/index.ts\" --init)");
+  });
 });

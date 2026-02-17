@@ -46,6 +46,9 @@ ShellShield is the **filesystem guardian** for the AI era. While tools like Tiri
 - ✅ npm/bunx publishing (`@shellshield/shellshield`)
 - ✅ CI/CD with GitHub Actions + Dependabot
 - ✅ `shellshield --why` command to explain the latest triggered rule
+- ✅ `shellshield --run <url>` command (download, preview, risk score, confirm, execute)
+- ✅ `shellshield --receipt` command for run audit receipts
+- ✅ Fish profile auto-wiring in installer (`~/.config/fish/config.fish`)
 - ✅ 183 tests, 42k+ ops/sec benchmark (10k iterations)
 - ✅ "Why Trust This?" section in README
 
@@ -61,7 +64,7 @@ ShellShield is the **filesystem guardian** for the AI era. While tools like Tiri
 - ⏳ Prebuilt binaries (Linux x64, macOS arm64) via GitHub Releases
 
 ### Shell Support 🔥
-- 🚧 Fish shell support (#3) 🎯 (`--init` template ready; installer/profile auto-wiring pending)
+- ✅ Fish shell support (#3) 🎯
 - ⏳ Seamless hook auto-init (detect shell, suggest config)
 
 ### Outreach
@@ -84,10 +87,10 @@ ShellShield is the **filesystem guardian** for the AI era. While tools like Tiri
 - ⏳ asdf plugin
 
 ### CLI Enhancements 🎯
-- ⏳ `shellshield run <url>` — safe `curl | bash` replacement (download → review → confirm)
+- ✅ `shellshield run <url>` — safe `curl | bash` replacement (download → review → confirm)
 - ⏳ `shellshield diff <url>` — byte-level homograph comparison
 - ✅ `shellshield why` — explain last triggered rule
-- ⏳ `shellshield receipt` — audit trail for executed scripts
+- ✅ `shellshield receipt` — audit trail for executed scripts
 
 ### New Protections
 - ⏳ Dotfile attack detection (writes to `~/.bashrc`, `~/.ssh/authorized_keys`)

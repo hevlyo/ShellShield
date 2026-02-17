@@ -127,6 +127,9 @@ case "$USER_SHELL" in
       PROFILE="$HOME/.bash_profile"
     fi
     ;;
+  fish)
+    PROFILE="$HOME/.config/fish/config.fish"
+    ;;
   *)
     info "Unsupported shell detected: $USER_SHELL"
     PROFILE="$HOME/.profile"
@@ -135,13 +138,29 @@ esac
 
 HOOK_BEGIN="# ShellShield Hook"
 HOOK_END="# ShellShield Hook End"
-HOOK_SCRIPT="
+
+if [[ "$USER_SHELL" == "fish" ]]; then
+  HOOK_SCRIPT="
+$HOOK_BEGIN
+if test -f \"$HOME/.shellshield/src/index.ts\"
+  eval (bun run \"$HOME/.shellshield/src/index.ts\" --init)
+end
+$HOOK_END
+"
+else
+  HOOK_SCRIPT="
 $HOOK_BEGIN
 if [ -f \"$HOME/.shellshield/src/index.ts\" ]; then
   eval \"\$(bun run \"$HOME/.shellshield/src/index.ts\" --init)\"
 fi
 $HOOK_END
 "
+fi
+
+mkdir -p "$(dirname "$PROFILE")"
+if [[ ! -f "$PROFILE" ]]; then
+  touch "$PROFILE"
+fi
 
 if [[ -f "$PROFILE" ]]; then
   if grep -q "$HOOK_BEGIN" "$PROFILE"; then

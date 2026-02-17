@@ -3,7 +3,7 @@ import { logAudit } from "./audit";
 import { getConfiguration } from "./config";
 import { ToolInput, Config } from "./types";
 import { createInterface } from "node:readline";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { printStats } from "./stats";
 import { formatBlockedMessage } from "./ui/terminal";
 import { writeShellContextSnapshot, parseTypeOutput, ShellContextSnapshot } from "./shell-context";
@@ -12,6 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { scoreUrlRisk } from "./security/validators";
 import { isBypassEnabled, hasBypassPrefix } from "./utils/bypass";
 import { SHELL_TEMPLATES } from "./integrations/templates";
+import { createHash } from "node:crypto";
 
 function runProbe(cmd: string[]): { ok: boolean; out: string } {
   try {
@@ -94,15 +95,24 @@ function isValidMode(value: string): value is ShellShieldMode {
 }
 
 interface AuditLogEntry {
+  id?: string;
   timestamp?: string;
   command?: string;
   blocked?: boolean;
   decision?: "blocked" | "allowed" | "warn" | "approved";
   mode?: ShellShieldMode;
-  source?: "check" | "paste" | "stdin";
+  source?: "check" | "paste" | "stdin" | "run";
   rule?: string;
   reason?: string;
   suggestion?: string;
+}
+
+interface ScriptFinding {
+  line: number;
+  command: string;
+  reason: string;
+  suggestion: string;
+  rule?: string;
 }
 
 function quotePosix(value: string): string {
@@ -311,6 +321,149 @@ function handleWhy(): void {
   process.exit(0);
 }
 
+function readAuditEntries(path: string): AuditLogEntry[] {
+  if (!existsSync(path)) return [];
+  try {
+    const content = readFileSync(path, "utf8");
+    const lines = content.split(/\r?\n/).filter(Boolean);
+    const entries: AuditLogEntry[] = [];
+    for (const line of lines) {
+      const parsed = parseAuditEntry(line);
+      if (parsed) entries.push(parsed);
+    }
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
+function extractRunUrl(command: string | undefined): string | undefined {
+  if (!command) return undefined;
+  const prefix = "shellshield run ";
+  if (!command.startsWith(prefix)) return undefined;
+  const value = command.slice(prefix.length).trim();
+  return value.length > 0 ? value : undefined;
+}
+
+function isRunReceiptEntry(entry: AuditLogEntry): boolean {
+  if (entry.source === "run") return true;
+  return typeof extractRunUrl(entry.command) === "string";
+}
+
+function handleReceipt(args: string[]): void {
+  const path = auditLogPath();
+  if (!existsSync(path)) {
+    console.log(`No audit log found at: ${path}`);
+    process.exit(0);
+  }
+
+  const entries = readAuditEntries(path).filter(isRunReceiptEntry);
+  if (entries.length === 0) {
+    console.log("No run receipts found yet.");
+    console.log("Run a script first: shellshield --run <url>");
+    console.log(`Log: ${path}`);
+    process.exit(0);
+  }
+
+  const json = args.includes("--json");
+  const list = args.includes("--list");
+  const countIdx = args.indexOf("--count");
+  const rawCount = countIdx !== -1 ? Number.parseInt(args[countIdx + 1] || "", 10) : 10;
+  const count = Number.isFinite(rawCount) && rawCount > 0 ? Math.min(rawCount, 100) : 10;
+
+  if (list) {
+    const selected = entries.slice(-count).reverse();
+    if (json) {
+      console.log(JSON.stringify(selected, null, 2));
+      process.exit(0);
+    }
+
+    console.log("ShellShield Receipts");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    for (const entry of selected) {
+      const decision = entry.decision || (entry.blocked ? "blocked" : "allowed");
+      const url = extractRunUrl(entry.command) || "(unknown url)";
+      const timestamp = entry.timestamp || "(no timestamp)";
+      console.log(`- ${timestamp}  ${decision}  ${url}`);
+    }
+    console.log(`Log: ${path}`);
+    process.exit(0);
+  }
+
+  const entry = entries[entries.length - 1];
+  if (json) {
+    console.log(JSON.stringify(entry, null, 2));
+    process.exit(0);
+  }
+
+  const decision = entry.decision || (entry.blocked ? "blocked" : "allowed");
+  const url = extractRunUrl(entry.command) || "(unknown url)";
+
+  console.log("ShellShield Receipt");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  if (entry.id) console.log(`ID: ${entry.id}`);
+  if (entry.timestamp) console.log(`Timestamp: ${entry.timestamp}`);
+  console.log(`URL: ${url}`);
+  console.log(`Decision: ${decision}`);
+  if (entry.mode) console.log(`Mode: ${entry.mode}`);
+  if (entry.source) console.log(`Source: ${entry.source}`);
+  if (entry.rule) console.log(`Rule: ${entry.rule}`);
+  if (entry.reason) console.log(`Reason: ${entry.reason}`);
+  if (entry.suggestion) console.log(`Details: ${entry.suggestion}`);
+  console.log(`Log: ${path}`);
+  process.exit(0);
+}
+
+function shouldAnalyzeScriptLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) return false;
+  if (/^(if|then|fi|for|while|until|do|done|case|esac|function)\b/i.test(trimmed)) return false;
+  if (trimmed === "{" || trimmed === "}") return false;
+
+  return /\b(rm|shred|dd|mkfs|find|xargs|curl|wget|bash|sh|zsh|python|node|ruby|perl|php|systemctl)\b|[|`]|(\$\()|(&&)|(\|\|)|(;)/i.test(
+    trimmed
+  );
+}
+
+function analyzeRemoteScript(script: string, config: Config): ScriptFinding[] {
+  const findings: ScriptFinding[] = [];
+  const lines = script.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!shouldAnalyzeScriptLine(line)) continue;
+
+    const result = checkDestructive(line, 0, config);
+    if (!result.blocked) continue;
+
+    findings.push({
+      line: i + 1,
+      command: line,
+      reason: result.reason,
+      suggestion: result.suggestion,
+      rule: result.rule,
+    });
+
+    if (findings.length >= 20) break;
+  }
+
+  return findings;
+}
+
+function printScriptPreview(script: string, limit = 30): void {
+  const lines = script.split(/\r?\n/);
+  const capped = lines.slice(0, limit);
+  const width = String(Math.max(capped.length, 1)).length;
+  for (let i = 0; i < capped.length; i++) {
+    const n = String(i + 1).padStart(width, " ");
+    const value = capped[i].length > 200 ? `${capped[i].slice(0, 200)}...` : capped[i];
+    console.log(`${n} | ${value}`);
+  }
+  if (lines.length > capped.length) {
+    console.log(`... (${lines.length - capped.length} more lines)`);
+  }
+}
+
 function printSnapshotHelp(): void {
   console.log("ShellShield Shell Context Snapshot");
   console.log("Usage:");
@@ -342,6 +495,25 @@ async function promptConfirmation(command: string, reason: string): Promise<bool
       }
     );
   });
+}
+
+async function promptYesNo(message: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stderr.isTTY) return false;
+
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stderr,
+  });
+
+  try {
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(message, resolve);
+    });
+    const lower = answer.trim().toLowerCase();
+    return lower === "y" || lower === "yes";
+  } finally {
+    rl.close();
+  }
 }
 
 async function checkAndAuditCommand(
@@ -484,6 +656,202 @@ function handleScore(args: string[], config: Config): void {
   process.exit(0);
 }
 
+async function handleRun(args: string[], config: Config): Promise<void> {
+  const idx = args.indexOf("--run");
+  const url = args[idx + 1];
+  if (!url || url.startsWith("--")) {
+    console.error("Usage: shellshield --run <url> [--yes] [--force] [--dry-run]");
+    process.exit(1);
+  }
+
+  const autoApprove = args.includes("--yes");
+  const force = args.includes("--force");
+  const dryRun = args.includes("--dry-run");
+  const runCommand = `shellshield run ${url}`;
+  const risk = scoreUrlRisk(url, config.trustedDomains);
+
+  if (risk.reasons.includes("INVALID_URL")) {
+    console.error(`Invalid URL: ${url}`);
+    process.exit(1);
+  }
+
+  let script = "";
+  let contentType = "";
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Failed to download script: HTTP ${response.status}`);
+      process.exit(1);
+    }
+    contentType = response.headers.get("content-type") || "";
+    script = await response.text();
+  } catch (error) {
+    console.error(`Failed to download script: ${String(error)}`);
+    process.exit(1);
+  }
+
+  if (!script.trim()) {
+    const reason = "REMOTE SCRIPT EMPTY";
+    logAudit(
+      runCommand,
+      {
+        blocked: true,
+        reason,
+        suggestion: "The downloaded script is empty. Review the URL before retrying.",
+        rule: "RemoteRun",
+      },
+      { source: "run", mode: config.mode, threshold: config.threshold, decision: "blocked" }
+    );
+    console.error(reason);
+    process.exit(2);
+  }
+
+  const bytes = new TextEncoder().encode(script).length;
+  if (bytes > 1024 * 1024) {
+    const reason = "REMOTE SCRIPT TOO LARGE";
+    logAudit(
+      runCommand,
+      {
+        blocked: true,
+        reason,
+        suggestion: "Script is larger than 1MB. Download manually and inspect before executing.",
+        rule: "RemoteRun",
+      },
+      { source: "run", mode: config.mode, threshold: config.threshold, decision: "blocked" }
+    );
+    console.error(reason);
+    process.exit(2);
+  }
+
+  const scriptHash = createHash("sha256").update(script).digest("hex");
+  const lineCount = script.split(/\r?\n/).length;
+  const findings = analyzeRemoteScript(script, config);
+
+  console.log("ShellShield Remote Run");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log(`URL: ${url}`);
+  console.log(`Content-Type: ${contentType || "(unknown)"}`);
+  console.log(`Bytes: ${bytes}`);
+  console.log(`Lines: ${lineCount}`);
+  console.log(`SHA256: ${scriptHash}`);
+  console.log(`Risk Score: ${risk.score}/100`);
+  if (risk.reasons.length > 0) {
+    console.log(`Risk Reasons: ${risk.reasons.join(", ")}`);
+  }
+  console.log(`Trusted Domain: ${risk.trusted ? "yes" : "no"}`);
+  console.log(`Findings: ${findings.length}`);
+  if (findings.length > 0) {
+    for (const finding of findings.slice(0, 5)) {
+      console.log(`- L${finding.line}: ${finding.reason} (${finding.command})`);
+    }
+    if (findings.length > 5) {
+      console.log(`- ... and ${findings.length - 5} more findings`);
+    }
+  }
+  console.log("");
+  console.log("Preview:");
+  printScriptPreview(script, 30);
+  console.log("");
+
+  const highRisk = risk.score >= 70;
+  if (!force && config.mode === "enforce" && (highRisk || findings.length > 0)) {
+    const reason = highRisk ? "REMOTE URL RISK TOO HIGH" : "REMOTE SCRIPT FINDINGS DETECTED";
+    const suggestion = highRisk
+      ? "Use a trusted HTTPS source, or run again with --force after manual review."
+      : "Script contains commands blocked in enforce mode. Review before executing.";
+    logAudit(
+      runCommand,
+      { blocked: true, reason, suggestion, rule: "RemoteRun" },
+      { source: "run", mode: config.mode, threshold: config.threshold, decision: "blocked" }
+    );
+    console.error(reason);
+    console.error(`Suggestion: ${suggestion}`);
+    process.exit(2);
+  }
+
+  if (dryRun) {
+    const details = `dry-run; sha256=${scriptHash}; risk=${risk.score}; findings=${findings.length}`;
+    logAudit(
+      runCommand,
+      { blocked: false, reason: "REMOTE SCRIPT REVIEWED", suggestion: details, rule: "RemoteRun" },
+      { source: "run", mode: config.mode, threshold: config.threshold, decision: "allowed" }
+    );
+    console.log("Dry run complete. Script was not executed.");
+    process.exit(0);
+  }
+
+  if (!autoApprove && (!process.stdin.isTTY || !process.stderr.isTTY)) {
+    logAudit(
+      runCommand,
+      {
+        blocked: true,
+        reason: "REMOTE SCRIPT CONFIRMATION REQUIRED",
+        suggestion: "Re-run with --yes to execute non-interactively.",
+        rule: "RemoteRun",
+      },
+      { source: "run", mode: config.mode, threshold: config.threshold, decision: "blocked" }
+    );
+    console.error("Interactive confirmation required. Re-run with --yes to execute non-interactively.");
+    process.exit(1);
+  }
+
+  if (!autoApprove) {
+    const confirmed = await promptYesNo("Execute downloaded script now? [y/N] ");
+    if (!confirmed) {
+      logAudit(
+        runCommand,
+        {
+          blocked: true,
+          reason: "REMOTE SCRIPT EXECUTION CANCELLED",
+          suggestion: "Execution cancelled by user.",
+          rule: "RemoteRun",
+        },
+        { source: "run", mode: config.mode, threshold: config.threshold, decision: "blocked" }
+      );
+      process.exit(2);
+    }
+  }
+
+  const runDir = join(homedir(), ".shellshield", "tmp");
+  mkdirSync(runDir, { recursive: true });
+  const tempPath = join(runDir, `run-${Date.now()}-${Math.random().toString(16).slice(2)}.sh`);
+  writeFileSync(tempPath, script, "utf8");
+
+  let exitCode = 1;
+  try {
+    const proc = Bun.spawnSync({
+      cmd: ["bash", tempPath],
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    exitCode = proc.exitCode ?? 1;
+  } finally {
+    try {
+      unlinkSync(tempPath);
+    } catch {
+      // ignore cleanup failures
+    }
+  }
+
+  const details = `sha256=${scriptHash}; risk=${risk.score}; findings=${findings.length}`;
+  if (exitCode === 0) {
+    logAudit(
+      runCommand,
+      { blocked: false, reason: "REMOTE SCRIPT EXECUTED", suggestion: details, rule: "RemoteRun" },
+      { source: "run", mode: config.mode, threshold: config.threshold, decision: "approved" }
+    );
+    process.exit(0);
+  }
+
+  logAudit(
+    runCommand,
+    { blocked: false, reason: `REMOTE SCRIPT EXIT CODE ${exitCode}`, suggestion: details, rule: "RemoteRun" },
+    { source: "run", mode: config.mode, threshold: config.threshold, decision: "warn" }
+  );
+  process.exit(exitCode);
+}
+
 function handleMode(args: string[], config: Config): void {
   const idx = args.indexOf("--mode");
   const value = idx !== -1 ? args[idx + 1] : "";
@@ -596,6 +964,10 @@ export async function main(): Promise<void> {
     handleWhy();
   }
 
+  if (args.includes("--receipt")) {
+    handleReceipt(args);
+  }
+
   if (args.includes("--mode")) {
     handleMode(args, config);
   }
@@ -611,6 +983,10 @@ export async function main(): Promise<void> {
 
   if (args.includes("--score")) {
     handleScore(args, config);
+  }
+
+  if (args.includes("--run")) {
+    await handleRun(args, config);
   }
 
   if (args.includes("--snapshot")) {

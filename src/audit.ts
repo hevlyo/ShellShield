@@ -7,7 +7,7 @@ import { BlockResult, Config } from "./types";
 export interface AuditMeta {
   mode?: Config["mode"];
   threshold?: number;
-  source?: "check" | "stdin" | "paste";
+  source?: "check" | "stdin" | "paste" | "run";
   decision?: "blocked" | "allowed" | "warn" | "approved";
 }
 
