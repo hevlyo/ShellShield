@@ -1,4 +1,5 @@
 export interface ToolInput {
+  command?: string;
   tool_input?: {
     command?: string;
   };
@@ -21,5 +22,5 @@ export interface TerminalInjectionResult {
 }
 
 export type BlockResult =
-  | { blocked: false }
+  | { blocked: false; reason?: string; suggestion?: string; rule?: string }
   | { blocked: true; reason: string; suggestion: string; rule?: string };

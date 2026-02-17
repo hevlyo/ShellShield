@@ -52,4 +52,9 @@ describe("Regex Security - ReDoS Prevention", () => {
       expect(safeRegexTest(pattern, oversizedInput)).toBe(false);
     }
   });
+
+  test("validatePatternPerformance honors max duration threshold", () => {
+    const result = validatePatternPerformance(/test/, "test", -1);
+    expect(result).toBe(false);
+  });
 });

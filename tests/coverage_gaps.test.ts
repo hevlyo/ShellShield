@@ -70,11 +70,25 @@ describe("Coverage gap tests", () => {
       process.env.OPENCODE_ALLOW_COMMANDS = "harmless";
 
       const cfg = getConfiguration();
-      expect(process.env.SHELLSHIELD_CONTEXT_PATH).toBe("/tmp/ctx.json");
+      expect(process.env.SHELLSHIELD_CONTEXT_PATH ?? "").toBe("/tmp/ctx.json");
       expect(cfg.blocked.has("destroy")).toBe(true);
       expect(cfg.allowed.has("harmless")).toBe(true);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+      restoreEnv(prevEnv, prevCwd);
+    }
+  });
+
+  test("shell context path expands leading ~ from environment", () => {
+    const prevEnv = { ...process.env };
+    const prevCwd = process.cwd();
+
+    try {
+      process.env.SHELLSHIELD_CONTEXT_PATH = "~/.shellshield/shell-context.json";
+      const expanded = getShellContextSnapshotPath();
+      expect(expanded?.startsWith("/")).toBe(true);
+      expect(expanded?.includes("/.shellshield/shell-context.json")).toBe(true);
+    } finally {
       restoreEnv(prevEnv, prevCwd);
     }
   });

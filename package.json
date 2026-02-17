@@ -4,6 +4,9 @@
   "description": "The ultimate safety shield for your terminal. Prevents accidental file destruction.",
   "type": "module",
   "main": "src/index.ts",
+  "bin": {
+    "shellshield": "bin/shellshield"
+  },
   "scripts": {
     "dev": "bun run src/index.ts",
     "test": "SHELLSHIELD_MODE=enforce bun test --max-concurrency 1 --timeout 15000",

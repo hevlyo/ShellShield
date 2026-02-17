@@ -25,6 +25,17 @@ const ConfigSchema = z.object({
 
 type FileConfig = z.infer<typeof ConfigSchema>;
 
+const VALID_MODES = new Set<Config["mode"]>(["enforce", "permissive", "interactive"]);
+
+function parseModeValue(raw: string | undefined): Config["mode"] | undefined {
+  if (!raw) return undefined;
+  const normalized = raw.trim().toLowerCase();
+  if (VALID_MODES.has(normalized as Config["mode"])) {
+    return normalized as Config["mode"];
+  }
+  return undefined;
+}
+
 function readConfigFile(path: string): FileConfig | null {
   if (!existsSync(path)) return null;
   try {
@@ -107,10 +118,13 @@ export function getConfiguration(): Config {
   const envMaxDepth = process.env.SHELLSHIELD_MAX_SUBSHELL_DEPTH ? Number.parseInt(process.env.SHELLSHIELD_MAX_SUBSHELL_DEPTH, 10) : undefined;
   const maxSubshellDepth = fileConfig.maxSubshellDepth ?? (envMaxDepth && !Number.isNaN(envMaxDepth) ? envMaxDepth : 5);
 
-  const mode =
-    (process.env.SHELLSHIELD_MODE as "enforce" | "permissive" | "interactive") ||
-    fileConfig.mode ||
-    "enforce";
+  const envMode = parseModeValue(process.env.SHELLSHIELD_MODE);
+  if (!envMode && process.env.SHELLSHIELD_MODE && process.env.DEBUG) {
+    console.warn(
+      `[ShellShield] Invalid SHELLSHIELD_MODE='${process.env.SHELLSHIELD_MODE}'. Falling back to configured/default mode.`
+    );
+  }
+  const mode = envMode || fileConfig.mode || "enforce";
 
   const customRules = fileConfig.customRules || [];
 

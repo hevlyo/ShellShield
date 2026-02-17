@@ -75,7 +75,7 @@ export function validatePatternPerformance(
   maxDurationMs: number = 100
 ): boolean {
   const start = performance.now();
-  const matched = pattern.test(testInput);
+  pattern.test(testInput);
   const duration = performance.now() - start;
-  return duration < maxDurationMs || matched || true;
+  return duration < maxDurationMs;
 }

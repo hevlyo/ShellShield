@@ -223,6 +223,11 @@ describe("Bypass patterns that SHOULD be blocked", () => {
     expect(result.blocked).toBe(true);
   });
 
+  test("find . -exec sh -c ... \\;", async () => {
+    const result = analyze("find . -exec sh -c 'echo ok' \\;");
+    expect(result.blocked).toBe(true);
+  });
+
   test("sudo /bin/rm file", async () => {
     const result = analyze("sudo /bin/rm file");
     expect(result.blocked).toBe(true);

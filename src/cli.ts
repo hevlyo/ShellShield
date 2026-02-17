@@ -76,6 +76,68 @@ function defaultSnapshotPath(): string {
   return resolve(homedir(), ".shellshield", "shell-context.json");
 }
 
+interface InitCommandContext {
+  invokePosix: string;
+  invokeFish: string;
+  invokePwsh: string;
+  availablePosix: string;
+  availableFish: string;
+  availablePwsh: string;
+}
+
+function quotePosix(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function quotePwsh(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function looksLikeBundledPath(path: string): boolean {
+  return path.includes("/$bunfs/") || path.includes("\\$bunfs\\");
+}
+
+function resolveInitCommandContext(): InitCommandContext {
+  const scriptPath = process.argv[1] || "";
+
+  if (scriptPath && looksLikeBundledPath(scriptPath)) {
+    const executable = resolve(process.cwd(), process.execPath || process.argv[0]);
+    const posixPath = quotePosix(executable);
+    const pwshPath = quotePwsh(executable);
+    return {
+      invokePosix: posixPath,
+      invokeFish: posixPath,
+      invokePwsh: `& ${pwshPath}`,
+      availablePosix: `[ -x ${posixPath} ]`,
+      availableFish: `test -x ${posixPath}`,
+      availablePwsh: `Test-Path -LiteralPath ${pwshPath}`,
+    };
+  }
+
+  if (scriptPath) {
+    const posixScript = quotePosix(scriptPath);
+    const pwshScript = quotePwsh(scriptPath);
+    return {
+      invokePosix: `bun run ${posixScript}`,
+      invokeFish: `bun run ${posixScript}`,
+      invokePwsh: `bun run ${pwshScript}`,
+      availablePosix: "command -v bun >/dev/null 2>&1",
+      availableFish: "type -q bun",
+      availablePwsh: "Get-Command bun -ErrorAction SilentlyContinue",
+    };
+  }
+
+  const fallback = "shellshield";
+  return {
+    invokePosix: fallback,
+    invokeFish: fallback,
+    invokePwsh: fallback,
+    availablePosix: "command -v shellshield >/dev/null 2>&1",
+    availableFish: "type -q shellshield",
+    availablePwsh: "Get-Command shellshield -ErrorAction SilentlyContinue",
+  };
+}
+
 function printSnapshotHelp(): void {
   console.log("ShellShield Shell Context Snapshot");
   console.log("Usage:");
@@ -109,7 +171,11 @@ async function promptConfirmation(command: string, reason: string): Promise<bool
   });
 }
 
-async function checkAndAuditCommand(command: string, config: any, source: "check" | "paste" | "stdin"): Promise<boolean> {
+async function checkAndAuditCommand(
+  command: string,
+  config: Config,
+  source: "check" | "paste" | "stdin"
+): Promise<boolean> {
   const result = checkDestructive(command);
   if (result.blocked) {
     if (config?.mode === "permissive") {
@@ -143,7 +209,7 @@ async function checkAndAuditCommand(command: string, config: any, source: "check
   return true;
 }
 
-async function handleCheck(args: string[], config: any): Promise<void> {
+async function handleCheck(args: string[], config: Config): Promise<void> {
   const cmdIdx = args.indexOf("--check");
   const command = args[cmdIdx + 1];
   if (!command) process.exit(0);
@@ -156,7 +222,7 @@ async function handleCheck(args: string[], config: any): Promise<void> {
   process.exit(ok ? 0 : 2);
 }
 
-async function handlePaste(config: any): Promise<void> {
+async function handlePaste(config: Config): Promise<void> {
   try {
     const input = await Bun.stdin.text();
     if (!input) process.exit(0);
@@ -177,7 +243,7 @@ async function handlePaste(config: any): Promise<void> {
   }
 }
 
-function handleSnapshot(args: string[], config: any): void {
+function handleSnapshot(args: string[], config: Config): void {
   if (args.includes("--help") || args.includes("-h")) {
     printSnapshotHelp();
     process.exit(0);
@@ -221,7 +287,7 @@ function handleSnapshot(args: string[], config: any): void {
   process.exit(0);
 }
 
-function handleScore(args: string[], config: any): void {
+function handleScore(args: string[], config: Config): void {
   const idx = args.indexOf("--score");
   const url = args[idx + 1];
   if (!url) {
@@ -258,11 +324,19 @@ function handleInit(): void {
   else if (shellName === "pwsh" || shellName === "powershell") templateKey = "powershell";
 
   const template = SHELL_TEMPLATES[templateKey] || SHELL_TEMPLATES.bash;
-  console.log(template.replaceAll("{{CLI_PATH}}", process.argv[1]));
+  const initCmd = resolveInitCommandContext();
+  const rendered = template
+    .replaceAll("{{CLI_INVOKE_POSIX}}", initCmd.invokePosix)
+    .replaceAll("{{CLI_INVOKE_FISH}}", initCmd.invokeFish)
+    .replaceAll("{{CLI_INVOKE_PWSH}}", initCmd.invokePwsh)
+    .replaceAll("{{CLI_AVAILABLE_POSIX}}", initCmd.availablePosix)
+    .replaceAll("{{CLI_AVAILABLE_FISH}}", initCmd.availableFish)
+    .replaceAll("{{CLI_AVAILABLE_PWSH}}", initCmd.availablePwsh);
+  console.log(rendered);
   process.exit(0);
 }
 
-async function handleStdin(config: any): Promise<void> {
+async function handleStdin(config: Config): Promise<void> {
   try {
     const input = await Bun.stdin.text();
     if (!input || input.trim() === "") process.exit(0);

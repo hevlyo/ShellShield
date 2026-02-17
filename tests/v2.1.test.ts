@@ -194,6 +194,26 @@ describe("ShellShield v2.1 - Enhanced DX & Configuration", () => {
           expect(proc.stdout.toString()).toContain("Set-PSReadLineKeyHandler");
       });
 
+      test("renders --init templates without unresolved placeholders", async () => {
+          const proc = spawnSync({
+              cmd: [BUN_PATH, "run", HOOK_PATH, "--init"],
+              env: {
+                ...process.env,
+                BUN_COVERAGE: "0",
+                SHELL: "/bin/zsh",
+                SHELLSHIELD_SKIP: "0",
+                INIT_CWD: PROJECT_ROOT,
+                PWD: PROJECT_ROOT,
+              },
+              cwd: PROJECT_ROOT
+          });
+          const out = proc.stdout.toString();
+          expect(proc.exitCode).toBe(0);
+          expect(out).not.toContain("${BYPASS_CASE}");
+          expect(out).not.toContain("${AUTO_REFRESH_TEMPLATE}");
+          expect(out).not.toContain("{{CLI_INVOKE_POSIX}}");
+      });
+
       test("supports raw command input via stdin (non-JSON)", async () => {
           const proc = spawn({
               cmd: [BUN_PATH, "run", HOOK_PATH],

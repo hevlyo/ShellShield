@@ -5,6 +5,7 @@ import { ParsedEntry, isOperator } from "./types";
 import { normalizeCommandName } from "./utils";
 
 const INSECURE_FLAGS = new Set(["-k", "--insecure", "--no-check-certificate"]);
+const CONTROL_OPERATORS = new Set(["&&", "||", ";", "&"]);
 
 function checkUrlCredentials(args: string[]): BlockResult | null {
   for (const arg of args) {
@@ -45,6 +46,42 @@ function checkTransportSecurity(args: string[]): BlockResult | null {
   return null;
 }
 
+function getPipeTargets(remaining: ParsedEntry[]): string[] {
+  const targets: string[] = [];
+
+  for (let i = 0; i < remaining.length; i++) {
+    const entry = remaining[i];
+    if (!isOperator(entry)) continue;
+
+    if (CONTROL_OPERATORS.has(entry.op)) break;
+    if (entry.op !== "|" && entry.op !== "|&") continue;
+
+    for (let j = i + 1; j < remaining.length; j++) {
+      const next = remaining[j];
+      if (isOperator(next)) {
+        if (CONTROL_OPERATORS.has(next.op)) return targets;
+        if (next.op === "|" || next.op === "|&") break;
+        continue;
+      }
+      if (typeof next === "string") {
+        targets.push(normalizeCommandName(next));
+      }
+      break;
+    }
+  }
+
+  return targets;
+}
+
+function getFirstUrlArg(args: string[]): string | null {
+  for (const arg of args) {
+    if (arg.startsWith("https://") || arg.startsWith("http://")) {
+      return arg;
+    }
+  }
+  return null;
+}
+
 export function checkPipeToShell(
   args: string[],
   remaining: ParsedEntry[],
@@ -53,24 +90,21 @@ export function checkPipeToShell(
   const credentialCheck = checkUrlCredentials(args);
   if (credentialCheck) return credentialCheck;
 
-  const pipeIdx = remaining.findIndex(
-    (entry) => isOperator(entry) && entry.op === "|"
-  );
-  if (pipeIdx === -1) return null;
-
-  const nextPart = remaining[pipeIdx + 1];
-  if (typeof nextPart !== "string") return null;
-
-  const nextCmd = normalizeCommandName(nextPart);
-  if (!SHELL_COMMANDS.has(nextCmd)) return null;
-
-  const url = args.find((arg) => arg.startsWith("http"));
-  if (url && isTrustedDomain(url, trustedDomains)) {
-    return null;
-  }
+  const pipeTargets = getPipeTargets(remaining);
+  if (pipeTargets.length === 0) return null;
+  const hasShellPipe = pipeTargets.some((cmd) => SHELL_COMMANDS.has(cmd));
+  if (!hasShellPipe) return null;
 
   const transportCheck = checkTransportSecurity(args);
   if (transportCheck) return transportCheck;
+
+  const url = getFirstUrlArg(args);
+  const isDirectShellPipe =
+    pipeTargets.length === 1 && SHELL_COMMANDS.has(pipeTargets[0]);
+
+  if (url && isDirectShellPipe && isTrustedDomain(url, trustedDomains)) {
+    return null;
+  }
 
   return {
     blocked: true,

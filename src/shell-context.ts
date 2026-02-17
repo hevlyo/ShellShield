@@ -33,14 +33,21 @@ function defaultSnapshotPath(): string {
   return resolve(homedir(), ".shellshield", "shell-context.json");
 }
 
+function expandHomePath(path: string): string {
+  if (path === "~") return homedir();
+  if (path.startsWith("~/")) return resolve(homedir(), path.slice(2));
+  if (path.startsWith("~\\")) return resolve(homedir(), path.slice(2));
+  return path;
+}
+
 export function getShellContextSnapshotPath(): string | null {
   const raw = process.env.SHELLSHIELD_CONTEXT_PATH;
-  if (raw && raw.trim().length > 0) return raw.trim();
+  if (raw && raw.trim().length > 0) return expandHomePath(raw.trim());
   return null;
 }
 
 export function readShellContextSnapshot(path?: string): ShellContextSnapshot | null {
-  const p = path ?? defaultSnapshotPath();
+  const p = expandHomePath(path ?? defaultSnapshotPath());
   if (cache && cache.path === p) return cache.snapshot;
 
   try {

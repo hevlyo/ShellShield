@@ -129,18 +129,18 @@ curl -fsSL https://hevlyo.github.io/ShellShield/install.sh -o /tmp/shellshield-i
 
 2. Verify integrity
 ```bash
-echo "363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254  /tmp/shellshield-install.sh" | sha256sum --check
+echo "e04b55f25dad3351317f27b39a6333a55efae350d4adfe21676d5e7c8b24ed17  /tmp/shellshield-install.sh" | sha256sum --check
 ```
 
 3. Run only if OK
 ```bash
-SHELLSHIELD_INSTALL_SHA256="363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254" \
+SHELLSHIELD_INSTALL_SHA256="e04b55f25dad3351317f27b39a6333a55efae350d4adfe21676d5e7c8b24ed17" \
   bash /tmp/shellshield-install.sh
 ```
 
 That’s it. ShellShield is now guarding your terminal.
 
-SHA256 (install.sh): `363aeea624bf28102c7fc096239293d749f35ff9e868df1c1b12da571ef4a254`
+SHA256 (install.sh): `e04b55f25dad3351317f27b39a6333a55efae350d4adfe21676d5e7c8b24ed17`
 
 GPG verification (optional):
 ```bash
@@ -163,11 +163,16 @@ bun install
 bun run src/index.ts --init
 ```
 
-### Install via npm/bunx
+### Install via npm (local checkout)
 
 ```bash
-bunx @shellshield/shellshield --init
+npm i -g .
+shellshield --init
 ```
+
+### Install via npm registry
+
+When the published package exposes the `shellshield` binary:
 
 ```bash
 npm i -g @shellshield/shellshield
@@ -223,6 +228,8 @@ shellshield --score https://example.com/install.sh --json
 
 ### More Ways To Run
 
+If your installed package version includes the `shellshield` binary:
+- bunx: `bunx @shellshield/shellshield --init`
 - npx: `npx @shellshield/shellshield --init`
 - pnpm: `pnpm dlx @shellshield/shellshield --init`
 - Standalone binary (local build): `bun run build` -> `dist/shellshield`

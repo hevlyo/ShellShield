@@ -16,4 +16,35 @@ describe("pipe-checks missing coverage", () => {
     const result = checkPipeToShell(args, remaining, ["trusted.com"]);
     expect(result).toBeNull();
   });
+
+  test("blocks insecure transport even for trusted domain", () => {
+    const args = ["-k", "https://trusted.com/install.sh"];
+    const remaining: ParsedEntry[] = [
+      "-k",
+      "https://trusted.com/install.sh",
+      { op: "|" },
+      "bash",
+    ];
+    const result = checkPipeToShell(args, remaining, ["trusted.com"]);
+    expect(result?.blocked).toBe(true);
+    if (result?.blocked) {
+      expect(result.reason).toContain("INSECURE TRANSPORT");
+    }
+  });
+
+  test("blocks chained pipelines ending in shell", () => {
+    const args = ["https://example.com/install.sh"];
+    const remaining: ParsedEntry[] = [
+      "https://example.com/install.sh",
+      { op: "|" },
+      "cat",
+      { op: "|" },
+      "bash",
+    ];
+    const result = checkPipeToShell(args, remaining, []);
+    expect(result?.blocked).toBe(true);
+    if (result?.blocked) {
+      expect(result.reason).toContain("PIPE-TO-SHELL");
+    }
+  });
 });

@@ -6,6 +6,25 @@ import { ParsedEntry } from "./types";
 import { filterFlags, getTrashSuggestion, normalizeCommandName } from "./utils";
 
 const ADDITIONAL_DANGEROUS_COMMANDS = new Set(["rm", "shred", "dd", "mkfs"]);
+const EXECUTOR_COMMANDS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+  "fish",
+  "pwsh",
+  "powershell",
+  "python",
+  "python2",
+  "python3",
+  "perl",
+  "ruby",
+  "node",
+  "bun",
+  "php",
+  ".",
+  "source",
+]);
 
 interface BlockedContext {
   blocked: Set<string>;
@@ -129,7 +148,11 @@ export function checkFindCommand(
   remaining: ParsedEntry[],
   blockedCommands: Set<string>
 ): BlockResult | null {
-  const dangerousCommands = new Set([...blockedCommands, ...ADDITIONAL_DANGEROUS_COMMANDS]);
+  const dangerousCommands = new Set([
+    ...blockedCommands,
+    ...ADDITIONAL_DANGEROUS_COMMANDS,
+    ...EXECUTOR_COMMANDS,
+  ]);
   
   if (remaining.some((entry) => typeof entry === "string" && entry.toLowerCase() === "-delete")) {
     return { blocked: true, reason: "find -delete detected", suggestion: getTrashSuggestion([]) };

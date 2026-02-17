@@ -10,8 +10,8 @@ if [ "\\$SHELLSHIELD_AUTO_SNAPSHOT" = "1" ]; then
     fi
     if [ -z "\\$_SHELLSHIELD_CONTEXT_SYNCED" ]; then
         export _SHELLSHIELD_CONTEXT_SYNCED=1
-        if command -v bun >/dev/null 2>&1; then
-            bun run "{{CLI_PATH}}" --snapshot --out "\\$SHELLSHIELD_CONTEXT_PATH" >/dev/null 2>&1
+        if {{CLI_AVAILABLE_POSIX}}; then
+            {{CLI_INVOKE_POSIX}} --snapshot --out "\\$SHELLSHIELD_CONTEXT_PATH" >/dev/null 2>&1
         fi
     fi
 fi`;
@@ -21,13 +21,13 @@ export const SHELL_TEMPLATES: Record<string, string> = {
 # ShellShield Zsh Integration
 _shellshield_accept_line() {
     # Check for valid bypass values
-\${BYPASS_CASE}
+${BYPASS_CASE}
             zle .accept-line
             return
             ;;
     esac
-    if command -v bun >/dev/null 2>&1; then
-        bun run "{{CLI_PATH}}" --check "\\$BUFFER" || return \\$?
+    if {{CLI_AVAILABLE_POSIX}}; then
+        {{CLI_INVOKE_POSIX}} --check "\\$BUFFER" || return \\$?
     fi
     zle .accept-line
 }
@@ -35,7 +35,7 @@ zle -N accept-line _shellshield_accept_line
 autoload -Uz add-zsh-hook
 add-zsh-hook -d preexec _shellshield_preexec 2>/dev/null
 unfunction _shellshield_preexec 2>/dev/null
-\${AUTO_REFRESH_TEMPLATE}
+${AUTO_REFRESH_TEMPLATE}
 
 # Optional: bracketed paste safety
 if [ "\\$SHELLSHIELD_PASTE_HOOK" = "1" ]; then
@@ -45,8 +45,8 @@ if [ "\\$SHELLSHIELD_PASTE_HOOK" = "1" ]; then
         zle .bracketed-paste
         local pasted="\\\${LBUFFER#\\"\\$before_left\\"}"
         if [ -n "\\$pasted" ]; then
-            if command -v bun >/dev/null 2>&1; then
-                printf "%s" "\\$pasted" | bun run "{{CLI_PATH}}" --paste || {
+            if {{CLI_AVAILABLE_POSIX}}; then
+                printf "%s" "\\$pasted" | {{CLI_INVOKE_POSIX}} --paste || {
                     LBUFFER="\\$before_left"
                     RBUFFER="\\$before_right"
                     return 1
@@ -61,16 +61,16 @@ fi
 # ShellShield Bash Integration
 _shellshield_bash_preexec() {
     # Check for valid bypass values
-\${BYPASS_CASE}
+${BYPASS_CASE}
             return 0
             ;;
     esac
-    if command -v bun >/dev/null 2>&1; then
-        bun run "{{CLI_PATH}}" --check "\\$BASH_COMMAND" || return \\$?
+    if {{CLI_AVAILABLE_POSIX}}; then
+        {{CLI_INVOKE_POSIX}} --check "\\$BASH_COMMAND" || return \\$?
     fi
 }
 trap '_shellshield_bash_preexec' DEBUG
-\${AUTO_REFRESH_TEMPLATE}
+${AUTO_REFRESH_TEMPLATE}
 `,
   fish: `
 # ShellShield Fish Integration
@@ -80,13 +80,13 @@ function __shellshield_preexec --on-event fish_preexec
     if contains "\\$skip_lower" 1 true yes on enable enabled
         return
     end
-    if type -q bun
+    if {{CLI_AVAILABLE_FISH}}
         set -l cmd \\$argv
         if test (count \\$cmd) -gt 1
             set -l cmd (string join " " -- \\$cmd)
         end
         if test -n "\\$cmd"
-            bun run "{{CLI_PATH}}" --check "\\$cmd"; or return \\$status
+            {{CLI_INVOKE_FISH}} --check "\\$cmd"; or return \\$status
         end
     end
 end
@@ -98,8 +98,8 @@ if test "\\$SHELLSHIELD_AUTO_SNAPSHOT" = "1"
     end
     if test -z "\\$_SHELLSHIELD_CONTEXT_SYNCED"
         set -gx _SHELLSHIELD_CONTEXT_SYNCED 1
-        if type -q bun
-            bun run "{{CLI_PATH}}" --snapshot --out "\\$SHELLSHIELD_CONTEXT_PATH" >/dev/null 2>&1
+        if {{CLI_AVAILABLE_FISH}}
+            {{CLI_INVOKE_FISH}} --snapshot --out "\\$SHELLSHIELD_CONTEXT_PATH" >/dev/null 2>&1
         end
     end
 end
@@ -115,12 +115,12 @@ if (Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
       [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
       return
     }
-    if (Get-Command bun -ErrorAction SilentlyContinue) {
+    if ({{CLI_AVAILABLE_PWSH}}) {
       \\$line = \\$null
       \\$cursor = \\$null
       [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]\\$line, [ref]\\$cursor)
       if (\\$line) {
-        bun run "{{CLI_PATH}}" --check \\$line
+        {{CLI_INVOKE_PWSH}} --check \\$line
         if (\\$LASTEXITCODE -ne 0) { return }
       }
     }

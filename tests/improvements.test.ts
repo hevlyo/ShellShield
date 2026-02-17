@@ -69,6 +69,16 @@ describe("Improved UX", () => {
       expect(result.suggestion).toContain("trash folder/");
     }
   });
+
+  test("does not mix next command arguments into rm suggestion", () => {
+    const result = analyze("rm file.txt && echo done");
+    expect(result.blocked).toBe(true);
+    if (result.blocked) {
+      expect(result.suggestion).toContain("trash file.txt");
+      expect(result.suggestion).not.toContain("echo");
+      expect(result.suggestion).not.toContain("done");
+    }
+  });
 });
 
 describe("Configuration", () => {
