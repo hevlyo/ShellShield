@@ -231,6 +231,14 @@ JSON output:
 shellshield --score https://example.com/install.sh --json
 ```
 
+### Explain Last Block/Warning
+
+Inspect the latest audit entry that triggered a rule:
+
+```bash
+shellshield --why
+```
+
 ### More Ways To Run
 
 If your installed package version includes the `shellshield` binary:

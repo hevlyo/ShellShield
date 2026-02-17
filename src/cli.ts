@@ -93,6 +93,18 @@ function isValidMode(value: string): value is ShellShieldMode {
   return MODE_CHOICES.includes(value as ShellShieldMode);
 }
 
+interface AuditLogEntry {
+  timestamp?: string;
+  command?: string;
+  blocked?: boolean;
+  decision?: "blocked" | "allowed" | "warn" | "approved";
+  mode?: ShellShieldMode;
+  source?: "check" | "paste" | "stdin";
+  rule?: string;
+  reason?: string;
+  suggestion?: string;
+}
+
 function quotePosix(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
@@ -219,6 +231,84 @@ function printModeHelp(): void {
   console.log("  shellshield --mode");
   console.log("  shellshield --mode <enforce|interactive|permissive>");
   console.log("  shellshield --select-mode");
+}
+
+function auditLogPath(): string {
+  const override = (process.env.SHELLSHIELD_AUDIT_PATH || "").trim();
+  if (override.length > 0) return override;
+
+  const dirOverride = (process.env.SHELLSHIELD_AUDIT_DIR || "").trim();
+  const baseDir = dirOverride.length > 0 ? dirOverride : join(homedir(), ".shellshield");
+  return join(baseDir, "audit.log");
+}
+
+function parseAuditEntry(line: string): AuditLogEntry | null {
+  try {
+    const parsed = JSON.parse(line);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as AuditLogEntry;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function hasTriggeredRule(entry: AuditLogEntry): boolean {
+  if (entry.blocked === true) return true;
+  if (typeof entry.reason === "string" && entry.reason.trim().length > 0) return true;
+  if (typeof entry.rule === "string" && entry.rule.trim().length > 0) return true;
+  if (entry.decision === "blocked" || entry.decision === "warn" || entry.decision === "approved") return true;
+  return false;
+}
+
+function readLastTriggeredAuditEntry(path: string): AuditLogEntry | null {
+  if (!existsSync(path)) return null;
+  try {
+    const content = readFileSync(path, "utf8");
+    const lines = content.split(/\r?\n/).filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const entry = parseAuditEntry(lines[i]);
+      if (!entry) continue;
+      if (hasTriggeredRule(entry)) return entry;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function handleWhy(): void {
+  const path = auditLogPath();
+  if (!existsSync(path)) {
+    console.log(`No audit log found at: ${path}`);
+    process.exit(0);
+  }
+
+  const entry = readLastTriggeredAuditEntry(path);
+  if (!entry) {
+    console.log("No triggered rules found in audit log yet.");
+    console.log(`Log: ${path}`);
+    process.exit(0);
+  }
+
+  const decision = entry.decision || (entry.blocked ? "blocked" : "allowed");
+  const reason = entry.reason || "N/A";
+  const suggestion = entry.suggestion || "N/A";
+  const command = entry.command || "N/A";
+
+  console.log("ShellShield Why");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  if (entry.timestamp) console.log(`Timestamp: ${entry.timestamp}`);
+  console.log(`Decision: ${decision}`);
+  if (entry.mode) console.log(`Mode: ${entry.mode}`);
+  if (entry.source) console.log(`Source: ${entry.source}`);
+  if (entry.rule) console.log(`Rule: ${entry.rule}`);
+  console.log(`Reason: ${reason}`);
+  console.log(`Suggestion: ${suggestion}`);
+  console.log(`Command: ${command}`);
+  console.log(`Log: ${path}`);
+  process.exit(0);
 }
 
 function printSnapshotHelp(): void {
@@ -500,6 +590,10 @@ export async function main(): Promise<void> {
   if (args.includes("--stats")) {
     printStats();
     process.exit(0);
+  }
+
+  if (args.includes("--why")) {
+    handleWhy();
   }
 
   if (args.includes("--mode")) {

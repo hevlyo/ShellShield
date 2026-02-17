@@ -1,6 +1,6 @@
 # ShellShield Roadmap
 
-**Last updated:** February 4, 2026
+**Last updated:** February 17, 2026
 
 ## Vision
 
@@ -12,7 +12,7 @@ ShellShield is the **filesystem guardian** for the AI era. While tools like Tiri
 - Alias/function masking detection
 - Git-aware safety (uncommitted changes protection)
 - Custom regex rules with user-defined suggestions
-- Zero config, ~32.8µs latency, 30k+ ops/sec
+- Zero config, ~23.5µs latency, 42k+ ops/sec
 
 ---
 
@@ -45,7 +45,8 @@ ShellShield is the **filesystem guardian** for the AI era. While tools like Tiri
 - ✅ SHA256 + GPG-signed installer
 - ✅ npm/bunx publishing (`@shellshield/shellshield`)
 - ✅ CI/CD with GitHub Actions + Dependabot
-- ✅ 117 tests, 42k+ ops/sec benchmark (10k iterations)
+- ✅ `shellshield --why` command to explain the latest triggered rule
+- ✅ 183 tests, 42k+ ops/sec benchmark (10k iterations)
 - ✅ "Why Trust This?" section in README
 
 ---
@@ -60,7 +61,7 @@ ShellShield is the **filesystem guardian** for the AI era. While tools like Tiri
 - ⏳ Prebuilt binaries (Linux x64, macOS arm64) via GitHub Releases
 
 ### Shell Support 🔥
-- ⏳ Fish shell support (#3) 🎯
+- 🚧 Fish shell support (#3) 🎯 (`--init` template ready; installer/profile auto-wiring pending)
 - ⏳ Seamless hook auto-init (detect shell, suggest config)
 
 ### Outreach
@@ -85,7 +86,7 @@ ShellShield is the **filesystem guardian** for the AI era. While tools like Tiri
 ### CLI Enhancements 🎯
 - ⏳ `shellshield run <url>` — safe `curl | bash` replacement (download → review → confirm)
 - ⏳ `shellshield diff <url>` — byte-level homograph comparison
-- ⏳ `shellshield why` — explain last triggered rule
+- ✅ `shellshield why` — explain last triggered rule
 - ⏳ `shellshield receipt` — audit trail for executed scripts
 
 ### New Protections
