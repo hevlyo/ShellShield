@@ -21,18 +21,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        # actions/checkout v6.0.2
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@v4
 
       - name: Setup Bun
-        # oven-sh/setup-bun v2.1.2
-        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.8
 
       - name: Restore Bun cache
-        # actions/cache v5.0.3
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306
+        uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-cache-${{ hashFiles('bun.lockb') }}
@@ -50,8 +47,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: ${{ secrets.CODECOV_TOKEN != '' }}
-        # codecov/codecov-action v5.5.2
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage/lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
